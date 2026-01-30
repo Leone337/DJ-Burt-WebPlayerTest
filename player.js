@@ -299,7 +299,7 @@ function buildNextTracks() {
     } else if (announcementNeeded.type === 'calendar') {
       // Calendar announcement
       const calendarFiles = getCalendarAnnouncement();
-      if (calendarFiles) {
+      if (calendarFiles && calendarFiles.length > 0) {
         calendarFiles.forEach(file => {
           tracks.push({
             file: file,
@@ -311,6 +311,13 @@ function buildNextTracks() {
         lastAnnouncementTime = Date.now();
         lastAnnouncementType = 'calendar';
         return tracks;
+      } else {
+        // No calendar announcements available - update timers anyway so we alternate to other next
+        console.log('⚠️ No CALENDAR announcements available, skipping to music');
+        lastCalendarAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        lastAnnouncementType = 'calendar';
+        // Fall through to play music instead
       }
     } else if (announcementNeeded.type === 'other') {
       // Other announcement
@@ -325,6 +332,13 @@ function buildNextTracks() {
         lastAnnouncementTime = Date.now();
         lastAnnouncementType = 'other';
         return tracks;
+      } else {
+        // No other announcements available - update timers anyway so we alternate to calendar next
+        console.log('⚠️ No OTHER announcements available, skipping to music');
+        lastOtherAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        lastAnnouncementType = 'other';
+        // Fall through to play music instead
       }
     }
   }
