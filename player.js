@@ -2,24 +2,9 @@
 // CONFIGURATION
 // ========================================
 const CONFIG = {
-  github: {
-    owner: 'leone337',
-    repo: 'DJ-Burt-WebPlayerTest',
-    branch: 'main'
-  },
-  
-  folders: {
-    music: 'audio/music',
-    intros: 'audio/intros',
-    specific_intros: 'audio/specific-intros',
-    outros: 'audio/outros',
-    specific_outros: 'audio/specific-outros',
-    jokes: 'audio/jokes',
-    stories: 'audio/stories',
-    blurbs: 'audio/blurbs',
-    announcements_calendar: 'audio/announcements/calendar',  // NEW
-    announcements_other: 'audio/announcements/other',        // NEW
-    announcements_special: 'audio/announcements/special'     // NEW (lunch/dinner)
+  r2: {
+    baseUrl: 'https://pub-9370ce973f68453bb0059afbc2ec7c3e.r2.dev',
+    manifestPath: 'manifest.json'
   },
   
   settings: {
@@ -29,7 +14,7 @@ const CONFIG = {
     nothingChance: 60,
     announcementIntervalMinutes: 15,
     
-    // NEW: Announcement scheduling
+    // Announcement scheduling
     calendarAnnouncementIntervalMinutes: 30,
     otherAnnouncementIntervalMinutes: 30,
     
@@ -54,7 +39,7 @@ let isPlaying = false;
 let currentTrackIndex = 0;
 let playlist = [];
 
-// Content pools (populated from GitHub)
+// Content pools (populated from manifest)
 let pools = {
   music: [],
   intros: [],
@@ -64,7 +49,9 @@ let pools = {
   jokes: [],
   stories: [],
   blurbs: [],
-  announcements: []
+  announcements_calendar: [],
+  announcements_other: [],
+  announcements_special: []
 };
 
 // Announcement tracking
@@ -84,45 +71,62 @@ let songsInCurrentBlock = 0;
 let lastAnnouncementTime = null;
 
 // ========================================
-// GITHUB API - FOLDER SCANNING
+// R2 MANIFEST LOADING
 // ========================================
-async function scanGitHubFolder(path, recursive = true) {
-  const url = `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${path}?ref=${CONFIG.github.branch}`;
+async function loadManifest() {
+  const url = `${CONFIG.r2.baseUrl}/${CONFIG.r2.manifestPath}`;
   
   try {
+    showStatus('Loading audio library from R2...');
     const response = await fetch(url);
+    
     if (!response.ok) {
-      console.warn(`Folder not found: ${path}`);
-      return [];
+      throw new Error(`Failed to load manifest: ${response.status}`);
     }
     
-    const items = await response.json();
-    let files = [];
-    
-    for (const item of items) {
-      if (item.type === 'file' && isAudioFile(item.name)) {
-        files.push({
-          name: item.name,
-          url: item.download_url,
-          path: item.path
-        });
-      } else if (item.type === 'dir' && recursive) {
-        // Recursively scan subfolders
-        const subFiles = await scanGitHubFolder(item.path, true);
-        files = files.concat(subFiles);
-      }
-    }
-    
-    return files;
+    const manifest = await response.json();
+    return manifest;
   } catch (error) {
-    console.error(`Error scanning ${path}:`, error);
-    return [];
+    console.error('Error loading manifest:', error);
+    return null;
   }
 }
 
-function isAudioFile(filename) {
-  const extensions = ['.mp3', '.opus', '.m4a', '.wav', '.ogg', '.aac'];
-  return extensions.some(ext => filename.toLowerCase().endsWith(ext));
+function buildFileObject(filename, folder) {
+  // Build the R2 URL for this file
+  let url;
+  
+  // Handle announcements subfolders
+  if (folder === 'calendar' || folder === 'other' || folder === 'special') {
+    url = `${CONFIG.r2.baseUrl}/announcements/${folder}/${filename}`;
+  }
+  // Handle specific-intros and specific-outros (with hyphens in folder name)
+  else if (folder === 'specific-intros') {
+    url = `${CONFIG.r2.baseUrl}/specific-intros/${filename}`;
+  }
+  else if (folder === 'specific-outros') {
+    url = `${CONFIG.r2.baseUrl}/specific-outros/${filename}`;
+  }
+  // Normal folders
+  else {
+    url = `${CONFIG.r2.baseUrl}/${folder}/${filename}`;
+  }
+  
+  return {
+    name: filename,
+    url: url,
+    path: `${folder}/${filename}`
+  };
+}
+
+function buildSpecificMapping(files, suffix) {
+  const mapping = {};
+  files.forEach(file => {
+    // Extract song name from "SongName-intro.opus" or "SongName-outro.opus"
+    const baseName = file.name.replace(suffix, '').replace(/\.[^/.]+$/, '');
+    mapping[baseName] = file;
+  });
+  return mapping;
 }
 
 // ========================================
@@ -166,25 +170,30 @@ function isTimeAfter(currentTime, afterTime) {
 // INITIALIZATION
 // ========================================
 async function initializePlayer() {
-  showStatus('Loading audio library from GitHub...');
-  
   try {
-    // Scan all folders
-    pools.music = await scanGitHubFolder(CONFIG.folders.music);
-    pools.intros = await scanGitHubFolder(CONFIG.folders.intros);
-    pools.outros = await scanGitHubFolder(CONFIG.folders.outros);
-    pools.jokes = await scanGitHubFolder(CONFIG.folders.jokes);
-    pools.stories = await scanGitHubFolder(CONFIG.folders.stories);
-    pools.blurbs = await scanGitHubFolder(CONFIG.folders.blurbs);
+    const manifest = await loadManifest();
     
-    // NEW: Load announcement folders
-    pools.announcements_calendar = await scanGitHubFolder(CONFIG.folders.announcements_calendar);
-    pools.announcements_other = await scanGitHubFolder(CONFIG.folders.announcements_other);
-    pools.announcements_special = await scanGitHubFolder(CONFIG.folders.announcements_special);
+    if (!manifest) {
+      showStatus('❌ Failed to load manifest.json');
+      return false;
+    }
+    
+    // Convert manifest arrays into file objects with R2 URLs
+    pools.music = manifest.music.map(f => buildFileObject(f, 'music'));
+    pools.intros = manifest.intros.map(f => buildFileObject(f, 'intros'));
+    pools.outros = manifest.outros.map(f => buildFileObject(f, 'outros'));
+    pools.jokes = manifest.jokes.map(f => buildFileObject(f, 'jokes'));
+    pools.stories = manifest.stories.map(f => buildFileObject(f, 'stories'));
+    pools.blurbs = manifest.blurbs.map(f => buildFileObject(f, 'blurbs'));
+    
+    // Announcements
+    pools.announcements_calendar = manifest.announcements.calendar.map(f => buildFileObject(f, 'calendar'));
+    pools.announcements_other = manifest.announcements.other.map(f => buildFileObject(f, 'other'));
+    pools.announcements_special = manifest.announcements.special.map(f => buildFileObject(f, 'special'));
     
     // Build specific intro/outro mappings
-    const specificIntros = await scanGitHubFolder(CONFIG.folders.specific_intros);
-    const specificOutros = await scanGitHubFolder(CONFIG.folders.specific_outros);
+    const specificIntros = manifest.specific_intros.map(f => buildFileObject(f, 'specific-intros'));
+    const specificOutros = manifest.specific_outros.map(f => buildFileObject(f, 'specific-outros'));
     
     pools.specific_intros = buildSpecificMapping(specificIntros, '-intro');
     pools.specific_outros = buildSpecificMapping(specificOutros, '-outro');
@@ -201,7 +210,7 @@ async function initializePlayer() {
     console.log(`   Special Announcements: ${pools.announcements_special.length}`);
     
     if (pools.music.length === 0) {
-      showStatus('❌ No music found! Upload some songs to audio/music folder.');
+      showStatus('❌ No music found! Upload songs to R2 bucket.');
       return false;
     }
     
@@ -212,16 +221,6 @@ async function initializePlayer() {
     showStatus('❌ Failed to load audio library. Check console for details.');
     return false;
   }
-}
-
-function buildSpecificMapping(files, suffix) {
-  const mapping = {};
-  files.forEach(file => {
-    // Extract song name from "SongName-intro.mp3" or "SongName-outro.mp3"
-    const baseName = file.name.replace(suffix, '').replace(/\.[^/.]+$/, '');
-    mapping[baseName] = file;
-  });
-  return mapping;
 }
 
 // ========================================
@@ -704,101 +703,101 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('blurb-slider').addEventListener('input', updateSettings);
 
   // Debug button handlers
-document.getElementById('force-calendar-btn').addEventListener('click', () => {
-  console.log('🔧 DEBUG: Forcing calendar announcement');
-  lastCalendarAnnouncementTime = 0; // Reset timer
-  lastAnnouncementType = 'other'; // Ensure calendar plays next
-  playlist = buildNextTracks();
-  currentTrackIndex = 0;
-  playCurrentTrack();
-});
-
-document.getElementById('force-other-btn').addEventListener('click', () => {
-  console.log('🔧 DEBUG: Forcing other announcement');
-  lastOtherAnnouncementTime = 0;
-  lastAnnouncementType = 'calendar'; // Ensure other plays next
-  playlist = buildNextTracks();
-  currentTrackIndex = 0;
-  playCurrentTrack();
-});
-
-document.getElementById('force-lunch-btn').addEventListener('click', () => {
-  console.log('🔧 DEBUG: Forcing lunch warning');
-  // Temporarily override time check
-  const lunchFile = getMealAnnouncement('lunch');
-  if (lunchFile) {
-    playlist = [{
-      file: lunchFile,
-      title: 'Lunch soon',
-      type: 'announcement-meal'
-    }];
+  document.getElementById('force-calendar-btn').addEventListener('click', () => {
+    console.log('🔧 DEBUG: Forcing calendar announcement');
+    lastCalendarAnnouncementTime = 0; // Reset timer
+    lastAnnouncementType = 'other'; // Ensure calendar plays next
+    playlist = buildNextTracks();
     currentTrackIndex = 0;
     playCurrentTrack();
-  } else {
-    alert('No lunch-soon.mp3 file found!');
-  }
-});
+  });
 
-document.getElementById('force-dinner-btn').addEventListener('click', () => {
-  console.log('🔧 DEBUG: Forcing dinner warning');
-  const dinnerFile = getMealAnnouncement('dinner');
-  if (dinnerFile) {
-    playlist = [{
-      file: dinnerFile,
-      title: 'Dinner soon',
-      type: 'announcement-meal'
-    }];
+  document.getElementById('force-other-btn').addEventListener('click', () => {
+    console.log('🔧 DEBUG: Forcing other announcement');
+    lastOtherAnnouncementTime = 0;
+    lastAnnouncementType = 'calendar'; // Ensure other plays next
+    playlist = buildNextTracks();
     currentTrackIndex = 0;
     playCurrentTrack();
-  } else {
-    alert('No dinner-soon.mp3 file found!');
+  });
+
+  document.getElementById('force-lunch-btn').addEventListener('click', () => {
+    console.log('🔧 DEBUG: Forcing lunch warning');
+    // Temporarily override time check
+    const lunchFile = getMealAnnouncement('lunch');
+    if (lunchFile) {
+      playlist = [{
+        file: lunchFile,
+        title: 'Lunch soon',
+        type: 'announcement-meal'
+      }];
+      currentTrackIndex = 0;
+      playCurrentTrack();
+    } else {
+      alert('No lunch-soon.opus file found!');
+    }
+  });
+
+  document.getElementById('force-dinner-btn').addEventListener('click', () => {
+    console.log('🔧 DEBUG: Forcing dinner warning');
+    const dinnerFile = getMealAnnouncement('dinner');
+    if (dinnerFile) {
+      playlist = [{
+        file: dinnerFile,
+        title: 'Dinner soon',
+        type: 'announcement-meal'
+      }];
+      currentTrackIndex = 0;
+      playCurrentTrack();
+    } else {
+      alert('No dinner-soon.opus file found!');
+    }
+  });
+
+  document.getElementById('reset-timers-btn').addEventListener('click', () => {
+    console.log('🔧 DEBUG: Resetting all timers');
+    lastCalendarAnnouncementTime = null;
+    lastOtherAnnouncementTime = null;
+    lastAnnouncementTime = null;
+    lastAnnouncementType = null;
+    updateDebugInfo();
+    alert('All announcement timers reset!');
+  });
+
+  // Test interval slider
+  document.getElementById('test-interval-slider').addEventListener('input', (e) => {
+    const minutes = parseInt(e.target.value);
+    CONFIG.settings.calendarAnnouncementIntervalMinutes = minutes;
+    CONFIG.settings.otherAnnouncementIntervalMinutes = minutes;
+    CONFIG.settings.announcementIntervalMinutes = minutes;
+    document.getElementById('test-interval-value').textContent = `${minutes}min`;
+    console.log(`🔧 DEBUG: Interval set to ${minutes} minutes`);
+  });
+
+  // Update debug info display every second
+  setInterval(updateDebugInfo, 1000);
+
+  function updateDebugInfo() {
+    const now = new Date();
+    document.getElementById('debug-current-time').textContent = 
+      now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    
+    document.getElementById('debug-last-calendar').textContent = 
+      lastCalendarAnnouncementTime ? formatTimeSince(lastCalendarAnnouncementTime) : 'Never';
+    
+    document.getElementById('debug-last-other').textContent = 
+      lastOtherAnnouncementTime ? formatTimeSince(lastOtherAnnouncementTime) : 'Never';
+    
+    document.getElementById('debug-last-type').textContent = 
+      lastAnnouncementType || 'None';
   }
-});
 
-document.getElementById('reset-timers-btn').addEventListener('click', () => {
-  console.log('🔧 DEBUG: Resetting all timers');
-  lastCalendarAnnouncementTime = null;
-  lastOtherAnnouncementTime = null;
-  lastAnnouncementTime = null;
-  lastAnnouncementType = null;
-  updateDebugInfo();
-  alert('All announcement timers reset!');
-});
-
-// Test interval slider
-document.getElementById('test-interval-slider').addEventListener('input', (e) => {
-  const minutes = parseInt(e.target.value);
-  CONFIG.settings.calendarAnnouncementIntervalMinutes = minutes;
-  CONFIG.settings.otherAnnouncementIntervalMinutes = minutes;
-  CONFIG.settings.announcementIntervalMinutes = minutes;
-  document.getElementById('test-interval-value').textContent = `${minutes}min`;
-  console.log(`🔧 DEBUG: Interval set to ${minutes} minutes`);
-});
-
-// Update debug info display every second
-setInterval(updateDebugInfo, 1000);
-
-function updateDebugInfo() {
-  const now = new Date();
-  document.getElementById('debug-current-time').textContent = 
-    now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-  
-  document.getElementById('debug-last-calendar').textContent = 
-    lastCalendarAnnouncementTime ? formatTimeSince(lastCalendarAnnouncementTime) : 'Never';
-  
-  document.getElementById('debug-last-other').textContent = 
-    lastOtherAnnouncementTime ? formatTimeSince(lastOtherAnnouncementTime) : 'Never';
-  
-  document.getElementById('debug-last-type').textContent = 
-    lastAnnouncementType || 'None';
-}
-
-function formatTimeSince(timestamp) {
-  const minutes = Math.floor((Date.now() - timestamp) / 1000 / 60);
-  if (minutes < 1) return 'Just now';
-  if (minutes === 1) return '1 min ago';
-  return `${minutes} mins ago`;
-}
+  function formatTimeSince(timestamp) {
+    const minutes = Math.floor((Date.now() - timestamp) / 1000 / 60);
+    if (minutes < 1) return 'Just now';
+    if (minutes === 1) return '1 min ago';
+    return `${minutes} mins ago`;
+  }
   
   // Auto-advance to next track
   audioPlayer.addEventListener('ended', playNextTrack);
