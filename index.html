@@ -1,33 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Leone Tours Radio DJ</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leone Tours Radio DJ</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Leone Tours Radio DJ</h1>
+        <h1>🎵 Leone Tours Radio DJ</h1>
         
+        <!-- START SCREEN -->
         <div id="start-screen">
+            <p id="loading-status" class="status-text">Click START to begin</p>
             <button id="start-btn" class="big-button">START PLAYING</button>
         </div>
         
+        <!-- PLAYER SCREEN -->
         <div id="player-screen" style="display: none;">
+            <!-- Now Playing Display -->
             <div id="now-playing">
                 <p class="label">Now Playing:</p>
                 <h2 id="track-title">Loading...</h2>
-                <p id="track-artist"></p>
+                <p id="track-artist" class="track-type">MUSIC</p>
             </div>
             
+            <!-- Audio Element -->
             <audio id="audio-player"></audio>
             
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            
+            <!-- Main Controls -->
             <div class="controls">
-                <button id="play-pause-btn">⏸</button>
-                <button id="skip-btn">⏭</button>
-                <input type="range" id="volume" min="0" max="100" value="70">
-                <button id="stop-btn">⏹ Stop</button>
+                <button id="play-pause-btn" class="control-btn">▶</button>
+                <button id="skip-btn" class="control-btn">⏭</button>
+                <div class="volume-control">
+                    <span>🔊</span>
+                    <input type="range" id="volume" min="0" max="100" value="70">
+                </div>
+            </div>
+            
+            <!-- Secondary Controls -->
+            <div class="secondary-controls">
+                <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
+                <button id="stop-btn" class="secondary-btn stop-btn">⏹ Stop</button>
+            </div>
+            
+            <!-- Settings Panel (Hidden by default) -->
+            <div id="settings-panel" class="settings-panel hidden">
+                <h3>DJ Content Settings</h3>
+                <p class="settings-info">Control how often Burt tells jokes, stories, or commentary between songs</p>
+                
+                <div class="slider-group">
+                    <label>
+                        <span class="slider-label">😄 Jokes</span>
+                        <span id="joke-value" class="slider-value">15%</span>
+                    </label>
+                    <input type="range" id="joke-slider" min="0" max="100" value="15" step="5">
+                </div>
+                
+                <div class="slider-group">
+                    <label>
+                        <span class="slider-label">📖 Stories</span>
+                        <span id="story-value" class="slider-value">15%</span>
+                    </label>
+                    <input type="range" id="story-slider" min="0" max="100" value="15" step="5">
+                </div>
+                
+                <div class="slider-group">
+                    <label>
+                        <span class="slider-label">📻 DJ Blurbs</span>
+                        <span id="blurb-value" class="slider-value">10%</span>
+                    </label>
+                    <input type="range" id="blurb-slider" min="0" max="100" value="10" step="5">
+                </div>
+                
+                <div class="slider-group">
+                    <label>
+                        <span class="slider-label">🎵 Nothing (Just Music)</span>
+                        <span id="nothing-value" class="slider-value">60%</span>
+                    </label>
+                    <div class="readonly-bar">
+                        <div id="nothing-bar" class="nothing-fill" style="width: 60%"></div>
+                    </div>
+                </div>
+                
+                <p id="settings-warning" class="warning" style="display: none;">
+                    ⚠️ Total must not exceed 100%
+                </p>
+                
+                <p class="settings-tip">
+                    💡 <strong>Tip:</strong> Higher "Nothing" % = More music, less chat
+                </p>
             </div>
         </div>
     </div>
