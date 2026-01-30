@@ -70,6 +70,35 @@ let playedAnnouncements = new Set();
 let songsInCurrentBlock = 0;
 let lastAnnouncementTime = null;
 
+// Toggle controls
+let morningEventsEnabled = true;
+let afternoonEventsEnabled = true;
+let instrumentalModeEnabled = false;
+
+// ========================================
+// HELPER FUNCTIONS FOR MUSIC FILTERING
+// ========================================
+function getMusicPool() {
+  if (!instrumentalModeEnabled) {
+    return pools.music;
+  }
+  
+  // Filter for instrumental tracks (contain "instrumental" or "inst" in filename)
+  const instrumentalTracks = pools.music.filter(track => {
+    const name = track.name.toLowerCase();
+    return name.includes('instrumental') || name.includes('inst') || name.includes('(i)');
+  });
+  
+  if (instrumentalTracks.length > 0) {
+    console.log(`🎵 Instrumental mode: ${instrumentalTracks.length} tracks available`);
+    return instrumentalTracks;
+  }
+  
+  // Fallback to all music if no instrumental tracks found
+  console.warn('⚠️ No instrumental tracks found, using all music');
+  return pools.music;
+}
+
 // ========================================
 // R2 MANIFEST LOADING
 // ========================================
@@ -236,7 +265,7 @@ function buildNextTracks() {
   if (isInMealQuietPeriod(currentTime)) {
     console.log('🍽️ Meal time - music only, no DJ content');
     // Just play music, skip all DJ content
-    const song = pickUnplayed(pools.music, playedMusic);
+    const song = pickUnplayed(getMusicPool(), playedMusic);
     if (!song) {
       playedMusic.clear();
       return buildNextTracks();
@@ -351,7 +380,7 @@ function buildNextTracks() {
   }
   
   // Play a song with intro/outro
-  const song = pickUnplayed(pools.music, playedMusic);
+  const song = pickUnplayed(getMusicPool(), playedMusic);
   if (!song) {
     // All songs played - reset history
     playedMusic.clear();
@@ -484,8 +513,8 @@ function getCalendarAnnouncement() {
   
   const tracks = [];
   
-  // Try to find morning announcement
-  if (beforeMorningCutoff) {
+  // Try to find morning announcement (if enabled)
+  if (beforeMorningCutoff && morningEventsEnabled) {
     const morningFile = pools.announcements_calendar.find(f => 
       f.name.toLowerCase().includes(`${dayName}-morning`)
     );
@@ -493,15 +522,21 @@ function getCalendarAnnouncement() {
       tracks.push(morningFile);
       console.log(`📅 Found morning: ${morningFile.name}`);
     }
+  } else if (beforeMorningCutoff && !morningEventsEnabled) {
+    console.log('🚫 Morning events disabled');
   }
   
-  // Try to find afternoon announcement (always before 14:00)
-  const afternoonFile = pools.announcements_calendar.find(f => 
-    f.name.toLowerCase().includes(`${dayName}-afternoon`)
-  );
-  if (afternoonFile) {
-    tracks.push(afternoonFile);
-    console.log(`📅 Found afternoon: ${afternoonFile.name}`);
+  // Try to find afternoon announcement (if enabled)
+  if (afternoonEventsEnabled) {
+    const afternoonFile = pools.announcements_calendar.find(f => 
+      f.name.toLowerCase().includes(`${dayName}-afternoon`)
+    );
+    if (afternoonFile) {
+      tracks.push(afternoonFile);
+      console.log(`📅 Found afternoon: ${afternoonFile.name}`);
+    }
+  } else {
+    console.log('🚫 Afternoon events disabled');
   }
   
   return tracks.length > 0 ? tracks : null;
@@ -703,6 +738,83 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('joke-slider').addEventListener('input', updateSettings);
   document.getElementById('story-slider').addEventListener('input', updateSettings);
   document.getElementById('blurb-slider').addEventListener('input', updateSettings);
+
+  // Toggle button handlers (sync both start and player screens)
+  function updateToggleButtons() {
+    // Morning events
+    const morningBtns = [
+      document.getElementById('morning-events-toggle'),
+      document.getElementById('morning-events-toggle-player')
+    ];
+    morningBtns.forEach(btn => {
+      if (btn) {
+        btn.textContent = morningEventsEnabled ? '✅ Morning Events ON' : '❌ Morning Events OFF';
+        btn.classList.toggle('toggle-off', !morningEventsEnabled);
+      }
+    });
+
+    // Afternoon events
+    const afternoonBtns = [
+      document.getElementById('afternoon-events-toggle'),
+      document.getElementById('afternoon-events-toggle-player')
+    ];
+    afternoonBtns.forEach(btn => {
+      if (btn) {
+        btn.textContent = afternoonEventsEnabled ? '✅ Afternoon Events ON' : '❌ Afternoon Events OFF';
+        btn.classList.toggle('toggle-off', !afternoonEventsEnabled);
+      }
+    });
+
+    // Instrumental mode
+    const instrumentalBtns = [
+      document.getElementById('instrumental-toggle'),
+      document.getElementById('instrumental-toggle-player')
+    ];
+    instrumentalBtns.forEach(btn => {
+      if (btn) {
+        btn.textContent = instrumentalModeEnabled ? '🎵 Instrumental Mode ON' : '🎵 Instrumental Mode OFF';
+        btn.classList.toggle('toggle-on', instrumentalModeEnabled);
+      }
+    });
+  }
+
+  // Morning events toggles (both screens)
+  document.getElementById('morning-events-toggle').addEventListener('click', () => {
+    morningEventsEnabled = !morningEventsEnabled;
+    updateToggleButtons();
+    console.log(`Morning events: ${morningEventsEnabled ? 'ON' : 'OFF'}`);
+  });
+  document.getElementById('morning-events-toggle-player').addEventListener('click', () => {
+    morningEventsEnabled = !morningEventsEnabled;
+    updateToggleButtons();
+    console.log(`Morning events: ${morningEventsEnabled ? 'ON' : 'OFF'}`);
+  });
+
+  // Afternoon events toggles (both screens)
+  document.getElementById('afternoon-events-toggle').addEventListener('click', () => {
+    afternoonEventsEnabled = !afternoonEventsEnabled;
+    updateToggleButtons();
+    console.log(`Afternoon events: ${afternoonEventsEnabled ? 'ON' : 'OFF'}`);
+  });
+  document.getElementById('afternoon-events-toggle-player').addEventListener('click', () => {
+    afternoonEventsEnabled = !afternoonEventsEnabled;
+    updateToggleButtons();
+    console.log(`Afternoon events: ${afternoonEventsEnabled ? 'ON' : 'OFF'}`);
+  });
+
+  // Instrumental mode toggles (both screens)
+  document.getElementById('instrumental-toggle').addEventListener('click', () => {
+    instrumentalModeEnabled = !instrumentalModeEnabled;
+    updateToggleButtons();
+    playedMusic.clear(); // Force re-selection from new pool
+    console.log(`Instrumental mode: ${instrumentalModeEnabled ? 'ON' : 'OFF'}`);
+  });
+  document.getElementById('instrumental-toggle-player').addEventListener('click', () => {
+    instrumentalModeEnabled = !instrumentalModeEnabled;
+    updateToggleButtons();
+    playedMusic.clear(); // Force re-selection from new pool
+    console.log(`Instrumental mode: ${instrumentalModeEnabled ? 'ON' : 'OFF'}`);
+  });
 
   // Debug button handlers
   document.getElementById('force-calendar-btn').addEventListener('click', () => {
