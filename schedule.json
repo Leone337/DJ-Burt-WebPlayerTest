@@ -1,44 +1,44 @@
 {
-  "intro": "audio/intro.mp3",
-  "outro": "audio/outro.mp3",
+  "intro": "audio/Lee.mp3",
+  "outro": "audio/The Wheelchair Grand Prix (Remix).mp3",
   
   "songs": [
     "audio/song1.mp3",
-    "audio/song2.mp3"
+    "audio/Clair de Lune.mp3"
   ],
   
   "dj_pool": [
-    "audio/dj_story_1.mp3"
+    "audio/Lee.mp3"
   ],
   
   "ambient_lunch": [
-    "audio/ambient_lunch.mp3"
+    "audio/Clair de Lune.mp3"
   ],
   
   "announcements": {
-    "lunch_soon": "audio/lunch_soon.mp3",
-    "management": "audio/management_update.mp3"
+    "lunch_soon": "audio/The Wheelchair Grand Prix (Remix).mp3",
+    "management": "audio/Lee.mp3"
   },
   
   "weekly_schedule": {
     "monday": {
-      "morning": ["audio/morning_craft.mp3"],
-      "afternoon": ["audio/afternoon_movie.mp3"]
+      "morning": ["audio/Lee.mp3"],
+      "afternoon": ["audio/The Wheelchair Grand Prix (Remix).mp3"]
     },
     "tuesday": {
       "morning": [],
-      "afternoon": ["audio/afternoon_movie.mp3"]
+      "afternoon": []
     },
     "wednesday": {
-      "morning": ["audio/morning_craft.mp3"],
+      "morning": [],
       "afternoon": []
     },
     "thursday": {
       "morning": [],
-      "afternoon": ["audio/afternoon_movie.mp3"]
+      "afternoon": []
     },
     "friday": {
-      "morning": ["audio/morning_craft.mp3"],
+      "morning": [],
       "afternoon": []
     },
     "saturday": {
