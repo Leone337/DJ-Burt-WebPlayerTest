@@ -93,7 +93,7 @@ async function loadManifest() {
 }
 
 function buildFileObject(filename, folder) {
-  // Build the R2 URL for this file - ENCODE the filename to handle spaces
+  // Build the R2 URL for this file - encode filename to handle spaces and special chars
   let url;
   
   // Handle announcements subfolders
