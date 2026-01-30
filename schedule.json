@@ -1,14 +1,30 @@
+**AHA! There's the smoking gun!**
+
+The 404s on other files make sense - they don't exist. But **song1.mp3 gives a MIME type error**, which means:
+
+**The file exists BUT it's corrupted or not actually an MP3.**
+
+When you renamed "Chai Coffee.mp3" to "song1.mp3" on GitHub, something went wrong. Either:
+- The original file was corrupted
+- GitHub's rename function broke it somehow
+- The file isn't actually an MP3
+
+**Quick fix - let's just use the files as-is:**
+
+Instead of renaming files, let's update schedule.json to use your actual filenames:
+
+```json
 {
   "intro": "audio/Lee.mp3",
   "outro": "audio/The Wheelchair Grand Prix (Remix).mp3",
   
   "songs": [
-    "audio/song1.mp3",
-    "audio/Clair de Lune.mp3"
+    "audio/Clair de Lune.mp3",
+    "audio/Lee.mp3"
   ],
   
   "dj_pool": [
-    "audio/Lee.mp3"
+    "audio/The Wheelchair Grand Prix (Remix).mp3"
   ],
   
   "ambient_lunch": [
@@ -16,38 +32,23 @@
   ],
   
   "announcements": {
-    "lunch_soon": "audio/The Wheelchair Grand Prix (Remix).mp3",
-    "management": "audio/Lee.mp3"
+    "lunch_soon": "audio/Lee.mp3",
+    "management": "audio/The Wheelchair Grand Prix (Remix).mp3"
   },
   
   "weekly_schedule": {
     "monday": {
       "morning": ["audio/Lee.mp3"],
-      "afternoon": ["audio/The Wheelchair Grand Prix (Remix).mp3"]
-    },
-    "tuesday": {
-      "morning": [],
       "afternoon": []
     },
-    "wednesday": {
-      "morning": [],
-      "afternoon": []
-    },
-    "thursday": {
-      "morning": [],
-      "afternoon": []
-    },
-    "friday": {
-      "morning": [],
-      "afternoon": []
-    },
-    "saturday": {
-      "morning": [],
-      "afternoon": []
-    },
-    "sunday": {
-      "morning": [],
-      "afternoon": []
-    }
+    "tuesday": {"morning": [], "afternoon": []},
+    "wednesday": {"morning": [], "afternoon": []},
+    "thursday": {"morning": [], "afternoon": []},
+    "friday": {"morning": [], "afternoon": []},
+    "saturday": {"morning": [], "afternoon": []},
+    "sunday": {"morning": [], "afternoon": []}
   }
 }
+```
+
+**Delete song1.mp3** from GitHub (it's broken), update schedule.json with the above, and it should work!
