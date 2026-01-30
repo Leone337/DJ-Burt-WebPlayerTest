@@ -1,263 +1,481 @@
 // ========================================
-// GLOBAL VARIABLES
+// CONFIGURATION
 // ========================================
-let schedule = null;
-let playlist = [];
-let currentTrackIndex = 0;
+const CONFIG = {
+  github: {
+    owner: 'leone337',  // Your GitHub username
+    repo: 'DJ-Burt-WebPlayerTest',  // Your repo name
+    branch: 'main'  // Usually 'main' or 'master'
+  },
+  
+  folders: {
+    music: 'audio/music',
+    intros: 'audio/intros',
+    specific_intros: 'audio/specific-intros',
+    outros: 'audio/outros',
+    specific_outros: 'audio/specific-outros',
+    jokes: 'audio/jokes',
+    stories: 'audio/stories',
+    blurbs: 'audio/blurbs',
+    announcements: 'audio/announcements'
+  },
+  
+  settings: {
+    jokeChance: 15,
+    storyChance: 15,
+    blurbChance: 10,
+    nothingChance: 60,
+    announcementIntervalMinutes: 15
+  }
+};
+
+// ========================================
+// GLOBAL STATE
+// ========================================
 let audioPlayer = null;
 let isPlaying = false;
+let currentTrackIndex = 0;
+let playlist = [];
+
+// Content pools (populated from GitHub)
+let pools = {
+  music: [],
+  intros: [],
+  specific_intros: {},
+  outros: [],
+  specific_outros: {},
+  jokes: [],
+  stories: [],
+  blurbs: [],
+  announcements: []
+};
+
+// Playback tracking
+let playedMusic = new Set();
+let playedJokes = new Set();
+let playedStories = new Set();
+let playedBlurbs = new Set();
+let playedAnnouncements = new Set();
+
+// DJ mode state
+let songsInCurrentBlock = 0;
+let lastAnnouncementTime = null;
+
+// ========================================
+// GITHUB API - FOLDER SCANNING
+// ========================================
+async function scanGitHubFolder(path, recursive = true) {
+  const url = `https://api.github.com/repos/${CONFIG.github.owner}/${CONFIG.github.repo}/contents/${path}?ref=${CONFIG.github.branch}`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`Folder not found: ${path}`);
+      return [];
+    }
+    
+    const items = await response.json();
+    let files = [];
+    
+    for (const item of items) {
+      if (item.type === 'file' && isAudioFile(item.name)) {
+        files.push({
+          name: item.name,
+          url: item.download_url,
+          path: item.path
+        });
+      } else if (item.type === 'dir' && recursive) {
+        // Recursively scan subfolders
+        const subFiles = await scanGitHubFolder(item.path, true);
+        files = files.concat(subFiles);
+      }
+    }
+    
+    return files;
+  } catch (error) {
+    console.error(`Error scanning ${path}:`, error);
+    return [];
+  }
+}
+
+function isAudioFile(filename) {
+  const extensions = ['.mp3', '.opus', '.m4a', '.wav', '.ogg', '.aac'];
+  return extensions.some(ext => filename.toLowerCase().endsWith(ext));
+}
 
 // ========================================
 // INITIALIZATION
 // ========================================
-document.addEventListener('DOMContentLoaded', async () => {
-    // Get references to HTML elements
-    audioPlayer = document.getElementById('audio-player');
-    const startBtn = document.getElementById('start-btn');
-    const playPauseBtn = document.getElementById('play-pause-btn');
-    const skipBtn = document.getElementById('skip-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const volumeSlider = document.getElementById('volume');
+async function initializePlayer() {
+  showStatus('Loading audio library from GitHub...');
+  
+  try {
+    // Scan all folders
+    pools.music = await scanGitHubFolder(CONFIG.folders.music);
+    pools.intros = await scanGitHubFolder(CONFIG.folders.intros);
+    pools.outros = await scanGitHubFolder(CONFIG.folders.outros);
+    pools.jokes = await scanGitHubFolder(CONFIG.folders.jokes);
+    pools.stories = await scanGitHubFolder(CONFIG.folders.stories);
+    pools.blurbs = await scanGitHubFolder(CONFIG.folders.blurbs);
+    pools.announcements = await scanGitHubFolder(CONFIG.folders.announcements);
     
-    // Load the schedule from JSON file
-    schedule = await loadSchedule();
+    // Build specific intro/outro mappings
+    const specificIntros = await scanGitHubFolder(CONFIG.folders.specific_intros);
+    const specificOutros = await scanGitHubFolder(CONFIG.folders.specific_outros);
     
-    // Set up button click handlers
-    startBtn.addEventListener('click', startPlaying);
-    playPauseBtn.addEventListener('click', togglePlayPause);
-    skipBtn.addEventListener('click', skipTrack);
-    stopBtn.addEventListener('click', stopPlaying);
-    volumeSlider.addEventListener('input', (e) => {
-        audioPlayer.volume = e.target.value / 100;
-    });
+    pools.specific_intros = buildSpecificMapping(specificIntros, '-intro');
+    pools.specific_outros = buildSpecificMapping(specificOutros, '-outro');
     
-    // Auto-advance to next track when current one ends
-    audioPlayer.addEventListener('ended', playNextTrack);
+    console.log('📊 Audio Library Loaded:');
+    console.log(`   Music: ${pools.music.length}`);
+    console.log(`   Intros: ${pools.intros.length} (+ ${Object.keys(pools.specific_intros).length} specific)`);
+    console.log(`   Outros: ${pools.outros.length} (+ ${Object.keys(pools.specific_outros).length} specific)`);
+    console.log(`   Jokes: ${pools.jokes.length}`);
+    console.log(`   Stories: ${pools.stories.length}`);
+    console.log(`   Blurbs: ${pools.blurbs.length}`);
+    console.log(`   Announcements: ${pools.announcements.length}`);
     
-    // Set initial volume
-    audioPlayer.volume = 0.7;
-});
-
-// ========================================
-// LOAD SCHEDULE
-// ========================================
-async function loadSchedule() {
-    try {
-        const response = await fetch('schedule.json');
-        return await response.json();
-    } catch (error) {
-        console.error('Failed to load schedule:', error);
-        alert('Could not load schedule. Please check connection.');
-        return null;
+    if (pools.music.length === 0) {
+      showStatus('❌ No music found! Upload some songs to audio/music folder.');
+      return false;
     }
+    
+    showStatus('✅ Ready to play!');
+    return true;
+  } catch (error) {
+    console.error('Failed to load audio library:', error);
+    showStatus('❌ Failed to load audio library. Check console for details.');
+    return false;
+  }
+}
+
+function buildSpecificMapping(files, suffix) {
+  const mapping = {};
+  files.forEach(file => {
+    // Extract song name from "SongName-intro.mp3" or "SongName-outro.mp3"
+    const baseName = file.name.replace(suffix, '').replace(/\.[^/.]+$/, '');
+    mapping[baseName] = file;
+  });
+  return mapping;
 }
 
 // ========================================
-// TIME CHECKING FUNCTIONS
+// PLAYLIST GENERATION (DJ MODE LOGIC)
 // ========================================
-function getCurrentTime() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    return { hours, minutes, totalMinutes: hours * 60 + minutes };
-}
-
-function getCurrentDay() {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return days[new Date().getDay()];
-}
-
-function isLunchTime() {
-    const { hours, minutes } = getCurrentTime();
-    // Between 12:00pm and 12:30pm
-    return (hours === 12 && minutes < 30);
-}
-
-function getAnnouncementType() {
-    const { hours, minutes } = getCurrentTime();
-    const day = getCurrentDay();
-    const daySchedule = schedule.weekly_schedule[day];
-    
-    // 12:00 - 12:30: No announcements (lunch mode)
-    if (hours === 12 && minutes < 30) {
-        return null;
+function buildNextTracks() {
+  const tracks = [];
+  
+  // Check if 15 minutes since last announcement
+  const needsAnnouncement = shouldPlayAnnouncement();
+  if (needsAnnouncement && pools.announcements.length > 0) {
+    const announcement = pickUnplayed(pools.announcements, playedAnnouncements);
+    if (announcement) {
+      tracks.push({
+        file: announcement,
+        title: 'Announcement',
+        type: 'announcement'
+      });
+      lastAnnouncementTime = Date.now();
+      return tracks;
     }
+  }
+  
+  // After 2 songs, consider playing content
+  if (songsInCurrentBlock >= 2) {
+    songsInCurrentBlock = 0;
     
-    // 11:30 - 12:00: Lunch soon
-    if (hours === 11 && minutes >= 30) {
-        return 'lunch_soon';
-    }
+    // Roll dice based on percentages
+    const roll = Math.random() * 100;
+    let cumulative = 0;
     
-    // 10:30 - 11:30: Morning events (if any scheduled)
-    if (hours === 10 && minutes >= 30 || hours === 11 && minutes < 30) {
-        if (daySchedule.morning && daySchedule.morning.length > 0) {
-            return 'morning_event';
-        }
-    }
-    
-    // 12:30 - 14:00: Afternoon events (if any scheduled)
-    if (hours === 12 && minutes >= 30 || hours === 13 || hours === 14 && minutes === 0) {
-        if (daySchedule.afternoon && daySchedule.afternoon.length > 0) {
-            return 'afternoon_event';
-        }
-    }
-    
-    // Default: Management announcement
-    return 'management';
-}
-
-// ========================================
-// PLAYLIST BUILDING
-// ========================================
-function buildPlaylist() {
-    const newPlaylist = [];
-    
-    // Check if it's lunch time - special mode
-    if (isLunchTime()) {
-        // Only ambient music during lunch
-        schedule.ambient_lunch.forEach(track => {
-            newPlaylist.push({
-                file: track,
-                title: 'Lunch Ambience',
-                type: 'ambient'
-            });
+    cumulative += CONFIG.settings.jokeChance;
+    if (roll < cumulative && pools.jokes.length > 0) {
+      const joke = pickUnplayed(pools.jokes, playedJokes);
+      if (joke) {
+        tracks.push({
+          file: joke,
+          title: "Burt's Joke",
+          type: 'joke'
         });
-        return newPlaylist;
+        return tracks;
+      }
     }
     
-    // Normal rotation: intro → song → song → outro → announcement → dj → repeat
+    cumulative += CONFIG.settings.storyChance;
+    if (roll < cumulative && pools.stories.length > 0) {
+      const story = pickUnplayed(pools.stories, playedStories);
+      if (story) {
+        tracks.push({
+          file: story,
+          title: "Burt's Story",
+          type: 'story'
+        });
+        return tracks;
+      }
+    }
     
-    // 1. Intro
-    newPlaylist.push({
-        file: schedule.intro,
-        title: "Burt's Introduction",
+    cumulative += CONFIG.settings.blurbChance;
+    if (roll < cumulative && pools.blurbs.length > 0) {
+      const blurb = pickUnplayed(pools.blurbs, playedBlurbs);
+      if (blurb) {
+        tracks.push({
+          file: blurb,
+          title: "Burt's Commentary",
+          type: 'blurb'
+        });
+        return tracks;
+      }
+    }
+    
+    // Else: falls into "nothing" percentage - just play music
+  }
+  
+  // Play a song with intro/outro
+  const song = pickUnplayed(pools.music, playedMusic);
+  if (!song) {
+    // All songs played - reset history
+    playedMusic.clear();
+    return buildNextTracks();
+  }
+  
+  const isFirstInBlock = songsInCurrentBlock === 0;
+  const isSecondInBlock = songsInCurrentBlock === 1;
+  
+  // INTRO (first song only)
+  if (isFirstInBlock) {
+    const intro = findIntroForSong(song);
+    if (intro) {
+      tracks.push({
+        file: intro,
+        title: 'Intro',
         type: 'intro'
-    });
-    
-    // 2 & 3. Two songs
-    schedule.songs.forEach((song, index) => {
-        newPlaylist.push({
-            file: song,
-            title: `Song ${index + 1}`,
-            type: 'music'
-        });
-    });
-    
-    // 4. Outro
-    newPlaylist.push({
-        file: schedule.outro,
-        title: "Burt's Outro",
-        type: 'outro'
-    });
-    
-    // 5. Announcement (based on time)
-    const announcementType = getAnnouncementType();
-    if (announcementType) {
-        let announcementFile = null;
-        const day = getCurrentDay();
-        const daySchedule = schedule.weekly_schedule[day];
-        
-        if (announcementType === 'lunch_soon') {
-            announcementFile = schedule.announcements.lunch_soon;
-        } else if (announcementType === 'morning_event' && daySchedule.morning.length > 0) {
-            announcementFile = daySchedule.morning[0]; // Use first morning event
-        } else if (announcementType === 'afternoon_event' && daySchedule.afternoon.length > 0) {
-            announcementFile = daySchedule.afternoon[0]; // Use first afternoon event
-        } else {
-            announcementFile = schedule.announcements.management;
-        }
-        
-        if (announcementFile) {
-            newPlaylist.push({
-                file: announcementFile,
-                title: 'Announcement',
-                type: 'announcement'
-            });
-        }
+      });
     }
-    
-    // 6. Random DJ track from pool
-    const randomDJ = schedule.dj_pool[Math.floor(Math.random() * schedule.dj_pool.length)];
-    newPlaylist.push({
-        file: randomDJ,
-        title: "Burt's Commentary",
-        type: 'dj'
-    });
-    
-    return newPlaylist;
+  }
+  
+  // MAIN SONG
+  tracks.push({
+    file: song,
+    title: song.name.replace(/\.[^/.]+$/, ''),  // Remove extension
+    type: 'music'
+  });
+  
+  // OUTRO (second song only)
+  if (isSecondInBlock) {
+    const outro = findOutroForSong(song);
+    if (outro) {
+      tracks.push({
+        file: outro,
+        title: 'Outro',
+        type: 'outro'
+      });
+    }
+  }
+  
+  songsInCurrentBlock++;
+  return tracks;
+}
+
+function shouldPlayAnnouncement() {
+  if (!lastAnnouncementTime) {
+    lastAnnouncementTime = Date.now();
+    return false;
+  }
+  
+  const minutesSinceAnnouncement = (Date.now() - lastAnnouncementTime) / 1000 / 60;
+  return minutesSinceAnnouncement >= CONFIG.settings.announcementIntervalMinutes;
+}
+
+function findIntroForSong(song) {
+  const baseName = song.name.replace(/\.[^/.]+$/, '');
+  
+  // Try specific intro first
+  if (pools.specific_intros[baseName]) {
+    return pools.specific_intros[baseName];
+  }
+  
+  // Fall back to generic intro
+  if (pools.intros.length > 0) {
+    return pickRandom(pools.intros);
+  }
+  
+  return null;
+}
+
+function findOutroForSong(song) {
+  const baseName = song.name.replace(/\.[^/.]+$/, '');
+  
+  // Try specific outro first
+  if (pools.specific_outros[baseName]) {
+    return pools.specific_outros[baseName];
+  }
+  
+  // Fall back to generic outro
+  if (pools.outros.length > 0) {
+    return pickRandom(pools.outros);
+  }
+  
+  return null;
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+function pickUnplayed(pool, playedSet) {
+  const unplayed = pool.filter(item => !playedSet.has(item.url));
+  
+  if (unplayed.length === 0) {
+    // All played - reset history for this pool
+    playedSet.clear();
+    return pickRandom(pool);
+  }
+  
+  const picked = pickRandom(unplayed);
+  if (picked) playedSet.add(picked.url);
+  return picked;
+}
+
+function pickRandom(array) {
+  if (array.length === 0) return null;
+  return array[Math.floor(Math.random() * array.length)];
 }
 
 // ========================================
 // PLAYBACK CONTROL
 // ========================================
-function startPlaying() {
-    // Hide start screen, show player
-    document.getElementById('start-screen').style.display = 'none';
-    document.getElementById('player-screen').style.display = 'block';
-    
-    // Build initial playlist
-    playlist = buildPlaylist();
-    currentTrackIndex = 0;
-    
-    // Start playing
-    playCurrentTrack();
+async function startPlaying() {
+  const initialized = await initializePlayer();
+  if (!initialized) return;
+  
+  // Hide start screen, show player
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('player-screen').style.display = 'block';
+  
+  // Build initial playlist
+  playlist = buildNextTracks();
+  currentTrackIndex = 0;
+  
+  // Start playing
+  playCurrentTrack();
 }
 
 function playCurrentTrack() {
-    if (playlist.length === 0) return;
-    
-    const track = playlist[currentTrackIndex];
-    
-    // Update display
-    document.getElementById('track-title').textContent = track.title;
-    document.getElementById('track-artist').textContent = track.type.toUpperCase();
-    
-    // Load and play audio
-    audioPlayer.src = track.file;
-    audioPlayer.play();
-    isPlaying = true;
-    
-    updatePlayPauseButton();
+  if (playlist.length === 0 || currentTrackIndex >= playlist.length) {
+    // Build next set of tracks
+    playlist = buildNextTracks();
+    currentTrackIndex = 0;
+  }
+  
+  const track = playlist[currentTrackIndex];
+  
+  // Update display
+  document.getElementById('track-title').textContent = track.title;
+  document.getElementById('track-artist').textContent = track.type.toUpperCase();
+  
+  // Load and play audio
+  audioPlayer.src = track.file.url;
+  audioPlayer.play();
+  isPlaying = true;
+  
+  updatePlayPauseButton();
+  
+  console.log(`▶️ Playing: ${track.title} (${track.type})`);
 }
 
 function playNextTrack() {
-    currentTrackIndex++;
-    
-    // If we've finished the playlist, rebuild it (handles time changes)
-    if (currentTrackIndex >= playlist.length) {
-        playlist = buildPlaylist();
-        currentTrackIndex = 0;
-    }
-    
-    playCurrentTrack();
+  currentTrackIndex++;
+  playCurrentTrack();
 }
 
 function skipTrack() {
-    playNextTrack();
+  playNextTrack();
 }
 
 function togglePlayPause() {
-    if (isPlaying) {
-        audioPlayer.pause();
-        isPlaying = false;
-    } else {
-        audioPlayer.play();
-        isPlaying = true;
-    }
-    updatePlayPauseButton();
+  if (isPlaying) {
+    audioPlayer.pause();
+    isPlaying = false;
+  } else {
+    audioPlayer.play();
+    isPlaying = true;
+  }
+  updatePlayPauseButton();
 }
 
 function updatePlayPauseButton() {
-    const btn = document.getElementById('play-pause-btn');
-    btn.textContent = isPlaying ? '⏸' : '▶';
+  const btn = document.getElementById('play-pause-btn');
+  btn.textContent = isPlaying ? '⏸' : '▶';
 }
 
 function stopPlaying() {
-    audioPlayer.pause();
-    audioPlayer.currentTime = 0;
-    isPlaying = false;
-    
-    // Return to start screen
-    document.getElementById('player-screen').style.display = 'none';
-    document.getElementById('start-screen').style.display = 'block';
+  audioPlayer.pause();
+  audioPlayer.currentTime = 0;
+  isPlaying = false;
+  
+  // Return to start screen
+  document.getElementById('player-screen').style.display = 'none';
+  document.getElementById('start-screen').style.display = 'block';
 }
+
+function showStatus(message) {
+  document.getElementById('loading-status').textContent = message;
+}
+
+// ========================================
+// SETTINGS UI
+// ========================================
+function updateSettings() {
+  CONFIG.settings.jokeChance = parseInt(document.getElementById('joke-slider').value);
+  CONFIG.settings.storyChance = parseInt(document.getElementById('story-slider').value);
+  CONFIG.settings.blurbChance = parseInt(document.getElementById('blurb-slider').value);
+  
+  // Auto-calculate "nothing" to make total 100%
+  const total = CONFIG.settings.jokeChance + CONFIG.settings.storyChance + CONFIG.settings.blurbChance;
+  CONFIG.settings.nothingChance = Math.max(0, 100 - total);
+  
+  // Update displays
+  document.getElementById('joke-value').textContent = CONFIG.settings.jokeChance + '%';
+  document.getElementById('story-value').textContent = CONFIG.settings.storyChance + '%';
+  document.getElementById('blurb-value').textContent = CONFIG.settings.blurbChance + '%';
+  document.getElementById('nothing-value').textContent = CONFIG.settings.nothingChance + '%';
+  
+  const isValid = total <= 100;
+  document.getElementById('settings-warning').style.display = isValid ? 'none' : 'block';
+}
+
+// ========================================
+// INITIALIZATION
+// ========================================
+document.addEventListener('DOMContentLoaded', () => {
+  audioPlayer = document.getElementById('audio-player');
+  
+  // Button handlers
+  document.getElementById('start-btn').addEventListener('click', startPlaying);
+  document.getElementById('play-pause-btn').addEventListener('click', togglePlayPause);
+  document.getElementById('skip-btn').addEventListener('click', skipTrack);
+  document.getElementById('stop-btn').addEventListener('click', stopPlaying);
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    document.getElementById('settings-panel').classList.toggle('hidden');
+  });
+  
+  // Volume control
+  document.getElementById('volume').addEventListener('input', (e) => {
+    audioPlayer.volume = e.target.value / 100;
+  });
+  
+  // Settings sliders
+  document.getElementById('joke-slider').addEventListener('input', updateSettings);
+  document.getElementById('story-slider').addEventListener('input', updateSettings);
+  document.getElementById('blurb-slider').addEventListener('input', updateSettings);
+  
+  // Auto-advance to next track
+  audioPlayer.addEventListener('ended', playNextTrack);
+  
+  // Set initial volume
+  audioPlayer.volume = 0.7;
+  
+  // Initialize settings display
+  updateSettings();
+  
+  showStatus('Click START to begin');
+});
