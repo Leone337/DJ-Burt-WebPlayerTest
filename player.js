@@ -51,13 +51,18 @@ let pools = {
   blurbs: [],
   announcements_calendar: [],
   announcements_other: [],
-  announcements_special: []
+  announcements_special: [],
+  weather_conditions: [],
+  weather_temperature: [],
+  weather_extremes: []
 };
 
 // Announcement tracking
 let lastCalendarAnnouncementTime = null;
 let lastOtherAnnouncementTime = null;
 let lastAnnouncementType = null; // 'calendar' or 'other'
+let lastWeatherAnnouncementTime = null;
+let weatherPlayedToday = false; // Reset daily
 
 // Playback tracking
 let playedMusic = new Set();
@@ -74,6 +79,173 @@ let lastAnnouncementTime = null;
 let morningEventsEnabled = true;
 let afternoonEventsEnabled = true;
 let instrumentalModeEnabled = false;
+
+// Weather state
+let cachedWeather = null;
+let lastWeatherFetch = null;
+const WEATHER_CACHE_MINUTES = 30; // Refresh weather every 30 minutes
+
+// ========================================
+// WEATHER API
+// ========================================
+async function fetchAdelaideWeather() {
+  // Check cache first
+  if (cachedWeather && lastWeatherFetch) {
+    const minutesSinceLastFetch = (Date.now() - lastWeatherFetch) / 1000 / 60;
+    if (minutesSinceLastFetch < WEATHER_CACHE_MINUTES) {
+      console.log(`🌤️ Using cached weather (${Math.floor(minutesSinceLastFetch)}min old)`);
+      return cachedWeather;
+    }
+  }
+  
+  try {
+    // Adelaide coordinates: -34.9285°S, 138.6007°E
+    // Open-Meteo API (free, no API key required)
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=-34.9285&longitude=138.6007&current=temperature_2m,weather_code&timezone=Australia%2FAdelaide';
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Weather API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const weather = {
+      temperature: Math.round(data.current.temperature_2m),
+      weatherCode: data.current.weather_code
+    };
+    
+    // Cache the result
+    cachedWeather = weather;
+    lastWeatherFetch = Date.now();
+    
+    console.log(`🌤️ Weather fetched: ${weather.temperature}°C, code: ${weather.weatherCode}`);
+    return weather;
+    
+  } catch (error) {
+    console.error('Failed to fetch weather:', error);
+    return null;
+  }
+}
+
+function getWeatherConditionFile(weatherCode) {
+  // WMO Weather interpretation codes
+  // https://open-meteo.com/en/docs
+  // 0: Clear sky
+  // 1-3: Mainly clear, partly cloudy, overcast
+  // 45-48: Fog
+  // 51-67: Drizzle/rain
+  // 71-77: Snow
+  // 80-82: Rain showers
+  // 85-86: Snow showers
+  // 95-99: Thunderstorm
+  
+  let conditionName = 'sunny'; // default
+  
+  if (weatherCode === 0) {
+    conditionName = 'sunny';
+  } else if (weatherCode >= 1 && weatherCode <= 2) {
+    conditionName = 'cloudy';
+  } else if (weatherCode === 3) {
+    conditionName = 'overcast';
+  } else if (weatherCode >= 51 && weatherCode <= 57) {
+    conditionName = 'rain';
+  } else if (weatherCode >= 61 && weatherCode <= 67) {
+    conditionName = 'rain';
+  } else if (weatherCode >= 80 && weatherCode <= 82) {
+    conditionName = 'showers';
+  } else if (weatherCode >= 95 && weatherCode <= 99) {
+    conditionName = 'storm';
+  }
+  
+  // Find matching file
+  const file = pools.weather_conditions.find(f => 
+    f.name.toLowerCase().includes(conditionName)
+  );
+  
+  if (file) {
+    console.log(`🌤️ Found condition file: ${file.name}`);
+    return file;
+  }
+  
+  console.warn(`⚠️ No weather condition file found for: ${conditionName}`);
+  return null;
+}
+
+function getWeatherTemperatureFile(temperature) {
+  // Check for extreme temperatures first
+  if (temperature <= 1) {
+    const extremeFile = pools.weather_extremes.find(f => 
+      f.name.toLowerCase().includes(`temp-${temperature}`)
+    );
+    if (extremeFile) {
+      console.log(`🌡️ Found extreme temp file: ${extremeFile.name}`);
+      return extremeFile;
+    }
+  }
+  
+  if (temperature >= 42) {
+    const extremeFile = pools.weather_extremes.find(f => 
+      f.name.toLowerCase().includes(`temp-${temperature}`)
+    );
+    if (extremeFile) {
+      console.log(`🌡️ Found extreme temp file: ${extremeFile.name}`);
+      return extremeFile;
+    }
+  }
+  
+  // Otherwise use temperature range files
+  let tempRange = '';
+  if (temperature < 5) tempRange = 'under-5';
+  else if (temperature < 10) tempRange = '5-10';
+  else if (temperature < 15) tempRange = '10-15';
+  else if (temperature < 20) tempRange = '15-20';
+  else if (temperature < 25) tempRange = '20-25';
+  else if (temperature < 30) tempRange = '25-30';
+  else if (temperature < 35) tempRange = '30-35';
+  else if (temperature < 40) tempRange = '35-40';
+  else tempRange = 'over-40';
+  
+  const file = pools.weather_temperature.find(f => 
+    f.name.toLowerCase().includes(`temp-${tempRange}`)
+  );
+  
+  if (file) {
+    console.log(`🌡️ Found temp file: ${file.name} (${temperature}°C)`);
+    return file;
+  }
+  
+  console.warn(`⚠️ No weather temperature file found for: ${temperature}°C`);
+  return null;
+}
+
+async function getWeatherAnnouncement() {
+  // Check if we have weather files
+  if (pools.weather_conditions.length === 0 && pools.weather_temperature.length === 0) {
+    console.log('⚠️ No weather files available');
+    return null;
+  }
+  
+  const weather = await fetchAdelaideWeather();
+  if (!weather) {
+    return null;
+  }
+  
+  const tracks = [];
+  
+  // Get condition file
+  const conditionFile = getWeatherConditionFile(weather.weatherCode);
+  if (conditionFile) {
+    tracks.push(conditionFile);
+  }
+  
+  // Get temperature file
+  const tempFile = getWeatherTemperatureFile(weather.temperature);
+  if (tempFile) {
+    tracks.push(tempFile);
+  }
+  
+  return tracks.length > 0 ? tracks : null;
+}
 
 // ========================================
 // HELPER FUNCTIONS FOR MUSIC FILTERING
@@ -128,6 +300,16 @@ function buildFileObject(filename, folder) {
   // Handle announcements subfolders
   if (folder === 'calendar' || folder === 'other' || folder === 'special') {
     url = `${CONFIG.r2.baseUrl}/announcements/${folder}/${encodeURIComponent(filename)}`;
+  }
+  // Handle weather subfolders
+  else if (folder === 'weather-conditions') {
+    url = `${CONFIG.r2.baseUrl}/announcements/weather/conditions/${encodeURIComponent(filename)}`;
+  }
+  else if (folder === 'weather-temperature') {
+    url = `${CONFIG.r2.baseUrl}/announcements/weather/temperature/${encodeURIComponent(filename)}`;
+  }
+  else if (folder === 'weather-extremes') {
+    url = `${CONFIG.r2.baseUrl}/announcements/weather/extremes/${encodeURIComponent(filename)}`;
   }
   // Handle specific-intros and specific-outros (with hyphens in folder name)
   else if (folder === 'specific-intros') {
@@ -222,6 +404,13 @@ async function initializePlayer() {
     pools.announcements_other = manifest.announcements.other.map(f => buildFileObject(f, 'other'));
     pools.announcements_special = manifest.announcements.special.map(f => buildFileObject(f, 'special'));
     
+    // Weather (optional - may not exist yet)
+    if (manifest.weather) {
+      pools.weather_conditions = (manifest.weather.conditions || []).map(f => buildFileObject(f, 'weather-conditions'));
+      pools.weather_temperature = (manifest.weather.temperature || []).map(f => buildFileObject(f, 'weather-temperature'));
+      pools.weather_extremes = (manifest.weather.extremes || []).map(f => buildFileObject(f, 'weather-extremes'));
+    }
+    
     // Build specific intro/outro mappings
     const specificIntros = manifest.specific_intros.map(f => buildFileObject(f, 'specific-intros'));
     const specificOutros = manifest.specific_outros.map(f => buildFileObject(f, 'specific-outros'));
@@ -239,6 +428,7 @@ async function initializePlayer() {
     console.log(`   Calendar Announcements: ${pools.announcements_calendar.length}`);
     console.log(`   Other Announcements: ${pools.announcements_other.length}`);
     console.log(`   Special Announcements: ${pools.announcements_special.length}`);
+    console.log(`   Weather: ${pools.weather_conditions.length} conditions, ${pools.weather_temperature.length} temps, ${pools.weather_extremes.length} extremes`);
     
     if (pools.music.length === 0) {
       showStatus('❌ No music found! Upload songs to R2 bucket.');
@@ -257,7 +447,7 @@ async function initializePlayer() {
 // ========================================
 // PLAYLIST GENERATION (DJ MODE LOGIC)
 // ========================================
-function buildNextTracks() {
+async function buildNextTracks() {
   const tracks = [];
   
   // Check if we're in meal quiet period
@@ -268,7 +458,7 @@ function buildNextTracks() {
     const song = pickUnplayed(getMusicPool(), playedMusic);
     if (!song) {
       playedMusic.clear();
-      return buildNextTracks();
+      return await buildNextTracks();
     }
     
     tracks.push({
@@ -340,6 +530,29 @@ function buildNextTracks() {
         lastAnnouncementType = 'other';
         // Fall through to play music instead
       }
+    } else if (announcementNeeded.type === 'weather') {
+      // Weather announcement
+      const weatherFiles = await getWeatherAnnouncement();
+      if (weatherFiles && weatherFiles.length > 0) {
+        weatherFiles.forEach(file => {
+          tracks.push({
+            file: file,
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            type: 'announcement-weather'
+          });
+        });
+        weatherPlayedToday = true;
+        lastWeatherAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        return tracks;
+      } else {
+        // No weather available - update flag anyway
+        console.log('⚠️ No WEATHER announcements available, skipping to music');
+        weatherPlayedToday = true;
+        lastWeatherAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        // Fall through to play music instead
+      }
     }
   }
   
@@ -398,7 +611,7 @@ function buildNextTracks() {
   if (!song) {
     // All songs played - reset history
     playedMusic.clear();
-    return buildNextTracks();
+    return await buildNextTracks();
   }
   
   const isFirstInBlock = songsInCurrentBlock === 0;
@@ -463,6 +676,18 @@ function shouldPlayAnnouncement() {
     if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
       console.log('🍽️ Dinner warning time');
       return { type: 'meal', meal: 'dinner' };
+    }
+  }
+  
+  // Check for weather announcement (once per day, between 9:00-11:00)
+  const weatherTime = currentTime.hours >= 9 && currentTime.hours < 11;
+  if (weatherTime && !weatherPlayedToday) {
+    if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
+      // Only play weather if we have weather files
+      if (pools.weather_conditions.length > 0 || pools.weather_temperature.length > 0) {
+        console.log('🌤️ Time for WEATHER announcement');
+        return { type: 'weather' };
+      }
     }
   }
   
@@ -637,17 +862,17 @@ async function startPlaying() {
   document.getElementById('player-screen').style.display = 'block';
   
   // Build initial playlist
-  playlist = buildNextTracks();
+  playlist = await buildNextTracks();
   currentTrackIndex = 0;
   
   // Start playing
   playCurrentTrack();
 }
 
-function playCurrentTrack() {
+async function playCurrentTrack() {
   if (playlist.length === 0 || currentTrackIndex >= playlist.length) {
     // Build next set of tracks
-    playlist = buildNextTracks();
+    playlist = await buildNextTracks();
     currentTrackIndex = 0;
   }
   
@@ -831,20 +1056,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Debug button handlers
-  document.getElementById('force-calendar-btn').addEventListener('click', () => {
+  document.getElementById('force-calendar-btn').addEventListener('click', async () => {
     console.log('🔧 DEBUG: Forcing calendar announcement');
     lastCalendarAnnouncementTime = 0; // Reset timer
     lastAnnouncementType = 'other'; // Ensure calendar plays next
-    playlist = buildNextTracks();
+    playlist = await buildNextTracks();
     currentTrackIndex = 0;
     playCurrentTrack();
   });
 
-  document.getElementById('force-other-btn').addEventListener('click', () => {
+  document.getElementById('force-other-btn').addEventListener('click', async () => {
     console.log('🔧 DEBUG: Forcing other announcement');
     lastOtherAnnouncementTime = 0;
     lastAnnouncementType = 'calendar'; // Ensure other plays next
-    playlist = buildNextTracks();
+    playlist = await buildNextTracks();
     currentTrackIndex = 0;
     playCurrentTrack();
   });
