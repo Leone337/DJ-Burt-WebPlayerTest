@@ -702,6 +702,103 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('joke-slider').addEventListener('input', updateSettings);
   document.getElementById('story-slider').addEventListener('input', updateSettings);
   document.getElementById('blurb-slider').addEventListener('input', updateSettings);
+
+  // Debug button handlers
+document.getElementById('force-calendar-btn').addEventListener('click', () => {
+  console.log('🔧 DEBUG: Forcing calendar announcement');
+  lastCalendarAnnouncementTime = 0; // Reset timer
+  lastAnnouncementType = 'other'; // Ensure calendar plays next
+  playlist = buildNextTracks();
+  currentTrackIndex = 0;
+  playCurrentTrack();
+});
+
+document.getElementById('force-other-btn').addEventListener('click', () => {
+  console.log('🔧 DEBUG: Forcing other announcement');
+  lastOtherAnnouncementTime = 0;
+  lastAnnouncementType = 'calendar'; // Ensure other plays next
+  playlist = buildNextTracks();
+  currentTrackIndex = 0;
+  playCurrentTrack();
+});
+
+document.getElementById('force-lunch-btn').addEventListener('click', () => {
+  console.log('🔧 DEBUG: Forcing lunch warning');
+  // Temporarily override time check
+  const lunchFile = getMealAnnouncement('lunch');
+  if (lunchFile) {
+    playlist = [{
+      file: lunchFile,
+      title: 'Lunch soon',
+      type: 'announcement-meal'
+    }];
+    currentTrackIndex = 0;
+    playCurrentTrack();
+  } else {
+    alert('No lunch-soon.mp3 file found!');
+  }
+});
+
+document.getElementById('force-dinner-btn').addEventListener('click', () => {
+  console.log('🔧 DEBUG: Forcing dinner warning');
+  const dinnerFile = getMealAnnouncement('dinner');
+  if (dinnerFile) {
+    playlist = [{
+      file: dinnerFile,
+      title: 'Dinner soon',
+      type: 'announcement-meal'
+    }];
+    currentTrackIndex = 0;
+    playCurrentTrack();
+  } else {
+    alert('No dinner-soon.mp3 file found!');
+  }
+});
+
+document.getElementById('reset-timers-btn').addEventListener('click', () => {
+  console.log('🔧 DEBUG: Resetting all timers');
+  lastCalendarAnnouncementTime = null;
+  lastOtherAnnouncementTime = null;
+  lastAnnouncementTime = null;
+  lastAnnouncementType = null;
+  updateDebugInfo();
+  alert('All announcement timers reset!');
+});
+
+// Test interval slider
+document.getElementById('test-interval-slider').addEventListener('input', (e) => {
+  const minutes = parseInt(e.target.value);
+  CONFIG.settings.calendarAnnouncementIntervalMinutes = minutes;
+  CONFIG.settings.otherAnnouncementIntervalMinutes = minutes;
+  CONFIG.settings.announcementIntervalMinutes = minutes;
+  document.getElementById('test-interval-value').textContent = `${minutes}min`;
+  console.log(`🔧 DEBUG: Interval set to ${minutes} minutes`);
+});
+
+// Update debug info display every second
+setInterval(updateDebugInfo, 1000);
+
+function updateDebugInfo() {
+  const now = new Date();
+  document.getElementById('debug-current-time').textContent = 
+    now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  
+  document.getElementById('debug-last-calendar').textContent = 
+    lastCalendarAnnouncementTime ? formatTimeSince(lastCalendarAnnouncementTime) : 'Never';
+  
+  document.getElementById('debug-last-other').textContent = 
+    lastOtherAnnouncementTime ? formatTimeSince(lastOtherAnnouncementTime) : 'Never';
+  
+  document.getElementById('debug-last-type').textContent = 
+    lastAnnouncementType || 'None';
+}
+
+function formatTimeSince(timestamp) {
+  const minutes = Math.floor((Date.now() - timestamp) / 1000 / 60);
+  if (minutes < 1) return 'Just now';
+  if (minutes === 1) return '1 min ago';
+  return `${minutes} mins ago`;
+}
   
   // Auto-advance to next track
   audioPlayer.addEventListener('ended', playNextTrack);
