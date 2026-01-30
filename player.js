@@ -93,23 +93,23 @@ async function loadManifest() {
 }
 
 function buildFileObject(filename, folder) {
-  // Build the R2 URL for this file
+  // Build the R2 URL for this file - ENCODE the filename to handle spaces
   let url;
   
   // Handle announcements subfolders
   if (folder === 'calendar' || folder === 'other' || folder === 'special') {
-    url = `${CONFIG.r2.baseUrl}/announcements/${folder}/${filename}`;
+    url = `${CONFIG.r2.baseUrl}/announcements/${folder}/${encodeURIComponent(filename)}`;
   }
   // Handle specific-intros and specific-outros (with hyphens in folder name)
   else if (folder === 'specific-intros') {
-    url = `${CONFIG.r2.baseUrl}/specific-intros/${filename}`;
+    url = `${CONFIG.r2.baseUrl}/specific-intros/${encodeURIComponent(filename)}`;
   }
   else if (folder === 'specific-outros') {
-    url = `${CONFIG.r2.baseUrl}/specific-outros/${filename}`;
+    url = `${CONFIG.r2.baseUrl}/specific-outros/${encodeURIComponent(filename)}`;
   }
   // Normal folders
   else {
-    url = `${CONFIG.r2.baseUrl}/${folder}/${filename}`;
+    url = `${CONFIG.r2.baseUrl}/${folder}/${encodeURIComponent(filename)}`;
   }
   
   return {
