@@ -109,7 +109,9 @@ function buildFileObject(filename, folder) {
   }
   // Normal folders
   else {
-    url = `${CONFIG.r2.baseUrl}/${folder}/${encodeURIComponent(filename)}`;
+    // Music folder is capitalized in R2
+    const folderName = folder === 'music' ? 'Music' : folder;
+    url = `${CONFIG.r2.baseUrl}/${folderName}/${encodeURIComponent(filename)}`;
   }
   
   return {
