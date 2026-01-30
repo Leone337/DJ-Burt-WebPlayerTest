@@ -87,6 +87,34 @@
                         <div id="nothing-bar" class="nothing-fill" style="width: 60%"></div>
                     </div>
                 </div>
+
+                <div class="debug-panel">
+    <h3>🔧 Debug & Testing</h3>
+    
+    <div class="debug-info">
+        <p><strong>Last Calendar:</strong> <span id="debug-last-calendar">Never</span></p>
+        <p><strong>Last Other:</strong> <span id="debug-last-other">Never</span></p>
+        <p><strong>Last Type:</strong> <span id="debug-last-type">None</span></p>
+        <p><strong>Current Time:</strong> <span id="debug-current-time">--:--</span></p>
+    </div>
+    
+    <div class="debug-controls">
+        <button id="force-calendar-btn" class="debug-btn">📅 Force Calendar Now</button>
+        <button id="force-other-btn" class="debug-btn">📢 Force Other Now</button>
+        <button id="force-lunch-btn" class="debug-btn">🍽️ Force Lunch Warning</button>
+        <button id="force-dinner-btn" class="debug-btn">🍽️ Force Dinner Warning</button>
+        <button id="reset-timers-btn" class="debug-btn">⏱️ Reset All Timers</button>
+    </div>
+    
+    <div class="debug-interval">
+        <label>
+            <span class="slider-label">⏱️ Test Interval (minutes)</span>
+            <span id="test-interval-value" class="slider-value">30min</span>
+        </label>
+        <input type="range" id="test-interval-slider" min="1" max="60" value="30" step="1">
+        <p class="debug-note">💡 Adjust for testing - normal is 30 minutes</p>
+    </div>
+</div>
                 
                 <p id="settings-warning" class="warning" style="display: none;">
                     ⚠️ Total must not exceed 100%
