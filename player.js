@@ -3,9 +3,9 @@
 // ========================================
 const CONFIG = {
   github: {
-    owner: 'leone337',  // Your GitHub username
-    repo: 'DJ-Burt-WebPlayerTest',  // Your repo name
-    branch: 'main'  // Usually 'main' or 'master'
+    owner: 'leone337',
+    repo: 'DJ-Burt-WebPlayerTest',
+    branch: 'main'
   },
   
   folders: {
@@ -17,7 +17,9 @@ const CONFIG = {
     jokes: 'audio/jokes',
     stories: 'audio/stories',
     blurbs: 'audio/blurbs',
-    announcements: 'audio/announcements'
+    announcements_calendar: 'audio/announcements/calendar',  // NEW
+    announcements_other: 'audio/announcements/other',        // NEW
+    announcements_special: 'audio/announcements/special'     // NEW (lunch/dinner)
   },
   
   settings: {
@@ -25,7 +27,22 @@ const CONFIG = {
     storyChance: 15,
     blurbChance: 10,
     nothingChance: 60,
-    announcementIntervalMinutes: 15
+    announcementIntervalMinutes: 15,
+    
+    // NEW: Announcement scheduling
+    calendarAnnouncementIntervalMinutes: 30,
+    otherAnnouncementIntervalMinutes: 30,
+    
+    morningCutoff: "10:30",
+    afternoonCutoff: "14:00",
+    
+    lunchWarningStart: "11:40",
+    lunchWarningEnd: "12:00",
+    lunchQuietEnd: "12:40",
+    
+    dinnerWarningStart: "16:40",
+    dinnerWarningEnd: "17:00",
+    dinnerQuietEnd: "17:40"
   }
 };
 
@@ -49,6 +66,11 @@ let pools = {
   blurbs: [],
   announcements: []
 };
+
+// Announcement tracking
+let lastCalendarAnnouncementTime = null;
+let lastOtherAnnouncementTime = null;
+let lastAnnouncementType = null; // 'calendar' or 'other'
 
 // Playback tracking
 let playedMusic = new Set();
@@ -104,6 +126,43 @@ function isAudioFile(filename) {
 }
 
 // ========================================
+// TIME UTILITIES
+// ========================================
+function getCurrentTime() {
+  const now = new Date();
+  return {
+    hours: now.getHours(),
+    minutes: now.getMinutes(),
+    day: now.getDay(), // 0 = Sunday, 1 = Monday, etc.
+    dayName: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()]
+  };
+}
+
+function parseTime(timeString) {
+  // "10:30" -> { hours: 10, minutes: 30 }
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return { hours, minutes };
+}
+
+function isTimeBetween(currentTime, startTime, endTime) {
+  const current = currentTime.hours * 60 + currentTime.minutes;
+  const start = parseTime(startTime);
+  const end = parseTime(endTime);
+  const startMin = start.hours * 60 + start.minutes;
+  const endMin = end.hours * 60 + end.minutes;
+  
+  return current >= startMin && current < endMin;
+}
+
+function isTimeAfter(currentTime, afterTime) {
+  const current = currentTime.hours * 60 + currentTime.minutes;
+  const after = parseTime(afterTime);
+  const afterMin = after.hours * 60 + after.minutes;
+  
+  return current >= afterMin;
+}
+
+// ========================================
 // INITIALIZATION
 // ========================================
 async function initializePlayer() {
@@ -117,7 +176,11 @@ async function initializePlayer() {
     pools.jokes = await scanGitHubFolder(CONFIG.folders.jokes);
     pools.stories = await scanGitHubFolder(CONFIG.folders.stories);
     pools.blurbs = await scanGitHubFolder(CONFIG.folders.blurbs);
-    pools.announcements = await scanGitHubFolder(CONFIG.folders.announcements);
+    
+    // NEW: Load announcement folders
+    pools.announcements_calendar = await scanGitHubFolder(CONFIG.folders.announcements_calendar);
+    pools.announcements_other = await scanGitHubFolder(CONFIG.folders.announcements_other);
+    pools.announcements_special = await scanGitHubFolder(CONFIG.folders.announcements_special);
     
     // Build specific intro/outro mappings
     const specificIntros = await scanGitHubFolder(CONFIG.folders.specific_intros);
@@ -133,7 +196,9 @@ async function initializePlayer() {
     console.log(`   Jokes: ${pools.jokes.length}`);
     console.log(`   Stories: ${pools.stories.length}`);
     console.log(`   Blurbs: ${pools.blurbs.length}`);
-    console.log(`   Announcements: ${pools.announcements.length}`);
+    console.log(`   Calendar Announcements: ${pools.announcements_calendar.length}`);
+    console.log(`   Other Announcements: ${pools.announcements_other.length}`);
+    console.log(`   Special Announcements: ${pools.announcements_special.length}`);
     
     if (pools.music.length === 0) {
       showStatus('❌ No music found! Upload some songs to audio/music folder.');
@@ -165,18 +230,72 @@ function buildSpecificMapping(files, suffix) {
 function buildNextTracks() {
   const tracks = [];
   
-  // Check if 15 minutes since last announcement
-  const needsAnnouncement = shouldPlayAnnouncement();
-  if (needsAnnouncement && pools.announcements.length > 0) {
-    const announcement = pickUnplayed(pools.announcements, playedAnnouncements);
-    if (announcement) {
-      tracks.push({
-        file: announcement,
-        title: 'Announcement',
-        type: 'announcement'
-      });
-      lastAnnouncementTime = Date.now();
-      return tracks;
+  // Check if we're in meal quiet period
+  const currentTime = getCurrentTime();
+  if (isInMealQuietPeriod(currentTime)) {
+    console.log('🍽️ Meal time - music only, no DJ content');
+    // Just play music, skip all DJ content
+    const song = pickUnplayed(pools.music, playedMusic);
+    if (!song) {
+      playedMusic.clear();
+      return buildNextTracks();
+    }
+    
+    tracks.push({
+      file: song,
+      title: song.name.replace(/\.[^/.]+$/, ''),
+      type: 'music'
+    });
+    
+    songsInCurrentBlock++;
+    return tracks;
+  }
+  
+  // Check for announcements
+  const announcementNeeded = shouldPlayAnnouncement();
+  if (announcementNeeded) {
+    if (announcementNeeded.type === 'meal') {
+      // Meal warning
+      const mealFile = getMealAnnouncement(announcementNeeded.meal);
+      if (mealFile) {
+        tracks.push({
+          file: mealFile,
+          title: `${announcementNeeded.meal} soon`,
+          type: 'announcement-meal'
+        });
+        lastAnnouncementTime = Date.now();
+        return tracks;
+      }
+    } else if (announcementNeeded.type === 'calendar') {
+      // Calendar announcement
+      const calendarFiles = getCalendarAnnouncement();
+      if (calendarFiles) {
+        calendarFiles.forEach(file => {
+          tracks.push({
+            file: file,
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            type: 'announcement-calendar'
+          });
+        });
+        lastCalendarAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        lastAnnouncementType = 'calendar';
+        return tracks;
+      }
+    } else if (announcementNeeded.type === 'other') {
+      // Other announcement
+      const otherFile = pickRandom(pools.announcements_other);
+      if (otherFile) {
+        tracks.push({
+          file: otherFile,
+          title: otherFile.name.replace(/\.[^/.]+$/, ''),
+          type: 'announcement-other'
+        });
+        lastOtherAnnouncementTime = Date.now();
+        lastAnnouncementTime = Date.now();
+        lastAnnouncementType = 'other';
+        return tracks;
+      }
     }
   }
   
@@ -256,7 +375,7 @@ function buildNextTracks() {
   // MAIN SONG
   tracks.push({
     file: song,
-    title: song.name.replace(/\.[^/.]+$/, ''),  // Remove extension
+    title: song.name.replace(/\.[^/.]+$/, ''),
     type: 'music'
   });
   
@@ -276,14 +395,130 @@ function buildNextTracks() {
   return tracks;
 }
 
+// ========================================
+// ANNOUNCEMENT SCHEDULING
+// ========================================
 function shouldPlayAnnouncement() {
-  if (!lastAnnouncementTime) {
-    lastAnnouncementTime = Date.now();
-    return false;
+  const currentTime = getCurrentTime();
+  
+  // Check if we're in meal quiet periods (NO announcements during these times)
+  if (isInMealQuietPeriod(currentTime)) {
+    console.log('🍽️ Meal quiet period - no announcements');
+    return null;
   }
   
-  const minutesSinceAnnouncement = (Date.now() - lastAnnouncementTime) / 1000 / 60;
-  return minutesSinceAnnouncement >= CONFIG.settings.announcementIntervalMinutes;
+  // Check for meal warning announcements (11:40-12:00, 16:40-17:00)
+  if (isTimeBetween(currentTime, CONFIG.settings.lunchWarningStart, CONFIG.settings.lunchWarningEnd)) {
+    if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
+      console.log('🍽️ Lunch warning time');
+      return { type: 'meal', meal: 'lunch' };
+    }
+  }
+  
+  if (isTimeBetween(currentTime, CONFIG.settings.dinnerWarningStart, CONFIG.settings.dinnerWarningEnd)) {
+    if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
+      console.log('🍽️ Dinner warning time');
+      return { type: 'meal', meal: 'dinner' };
+    }
+  }
+  
+  // Determine which type of announcement should play (calendar or other)
+  // They alternate every 30 minutes
+  const needsCalendar = !lastCalendarAnnouncementTime || 
+                       minutesSince(lastCalendarAnnouncementTime) >= CONFIG.settings.calendarAnnouncementIntervalMinutes;
+  
+  const needsOther = !lastOtherAnnouncementTime || 
+                    minutesSince(lastOtherAnnouncementTime) >= CONFIG.settings.otherAnnouncementIntervalMinutes;
+  
+  // If we played calendar last, try other next (and vice versa)
+  if (lastAnnouncementType === 'calendar' && needsOther) {
+    console.log('📢 Time for OTHER announcement');
+    return { type: 'other' };
+  } else if (lastAnnouncementType === 'other' && needsCalendar) {
+    console.log('📅 Time for CALENDAR announcement');
+    return { type: 'calendar' };
+  } else if (needsCalendar && needsOther) {
+    // Both ready - start with calendar
+    console.log('📅 Time for CALENDAR announcement (first)');
+    return { type: 'calendar' };
+  }
+  
+  return null;
+}
+
+function isInMealQuietPeriod(currentTime) {
+  // During lunch: 12:00-12:40
+  if (isTimeBetween(currentTime, CONFIG.settings.lunchWarningEnd, CONFIG.settings.lunchQuietEnd)) {
+    return true;
+  }
+  
+  // During dinner: 17:00-17:40
+  if (isTimeBetween(currentTime, CONFIG.settings.dinnerWarningEnd, CONFIG.settings.dinnerQuietEnd)) {
+    return true;
+  }
+  
+  return false;
+}
+
+function minutesSince(timestamp) {
+  return (Date.now() - timestamp) / 1000 / 60;
+}
+
+function getCalendarAnnouncement() {
+  const currentTime = getCurrentTime();
+  const dayName = currentTime.dayName;
+  
+  // Before 10:30: Read both morning and afternoon
+  // 10:30-14:00: Only afternoon
+  // After 14:00: None
+  
+  const beforeMorningCutoff = !isTimeAfter(currentTime, CONFIG.settings.morningCutoff);
+  const beforeAfternoonCutoff = !isTimeAfter(currentTime, CONFIG.settings.afternoonCutoff);
+  
+  if (!beforeAfternoonCutoff) {
+    // After 14:00 - no calendar announcements
+    console.log('⏰ After 14:00 - no calendar announcements');
+    return null;
+  }
+  
+  const tracks = [];
+  
+  // Try to find morning announcement
+  if (beforeMorningCutoff) {
+    const morningFile = pools.announcements_calendar.find(f => 
+      f.name.toLowerCase().includes(`${dayName}-morning`)
+    );
+    if (morningFile) {
+      tracks.push(morningFile);
+      console.log(`📅 Found morning: ${morningFile.name}`);
+    }
+  }
+  
+  // Try to find afternoon announcement (always before 14:00)
+  const afternoonFile = pools.announcements_calendar.find(f => 
+    f.name.toLowerCase().includes(`${dayName}-afternoon`)
+  );
+  if (afternoonFile) {
+    tracks.push(afternoonFile);
+    console.log(`📅 Found afternoon: ${afternoonFile.name}`);
+  }
+  
+  return tracks.length > 0 ? tracks : null;
+}
+
+function getMealAnnouncement(meal) {
+  // Find "lunch-soon.mp3" or "dinner-soon.mp3"
+  const mealFile = pools.announcements_special.find(f => 
+    f.name.toLowerCase().includes(`${meal}-soon`)
+  );
+  
+  if (mealFile) {
+    console.log(`🍽️ Found ${meal} announcement: ${mealFile.name}`);
+    return mealFile;
+  }
+  
+  console.warn(`⚠️ No ${meal} announcement found`);
+  return null;
 }
 
 function findIntroForSong(song) {
