@@ -1,132 +1,372 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leone Tours Radio DJ</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ Burt Web Player</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 800px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 2.5em;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      text-align: center;
+      padding: 15px;
+      background: #f0f0f0;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      color: #333;
+      font-size: 1.1em;
+    }
+
+    /* Toggle Buttons */
+    .toggles-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .toggle-btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #4CAF50;
+      color: white;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+
+    .toggle-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    .toggle-btn.toggle-off {
+      background: #f44336;
+    }
+
+    .toggle-btn.toggle-on {
+      background: #2196F3;
+    }
+
+    /* Start Button */
+    .start-btn {
+      width: 100%;
+      padding: 20px;
+      font-size: 1.5em;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    .start-btn:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    }
+
+    /* Player Controls */
+    .now-playing {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 15px;
+      color: white;
+    }
+
+    .track-title {
+      font-size: 1.8em;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .track-artist {
+      font-size: 1.2em;
+      opacity: 0.9;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 15px 30px;
+      font-size: 1.5em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #667eea;
+      color: white;
+    }
+
+    .control-btn:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+    }
+
+    .volume-control {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin: 20px 0;
+      justify-content: center;
+    }
+
+    .volume-control input {
+      width: 200px;
+    }
+
+    /* Settings Panel */
+    .settings-panel {
+      margin-top: 20px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 10px;
+    }
+
+    .settings-panel.hidden {
+      display: none;
+    }
+
+    .setting-row {
+      margin-bottom: 20px;
+    }
+
+    .setting-row label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .setting-row input[type="range"] {
+      width: 100%;
+    }
+
+    .setting-value {
+      display: inline-block;
+      margin-left: 10px;
+      font-weight: bold;
+      color: #667eea;
+    }
+
+    /* Debug Panel */
+    .debug-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f0f0f0;
+      border-radius: 10px;
+      font-size: 0.9em;
+    }
+
+    .debug-panel h3 {
+      margin-bottom: 10px;
+      color: #667eea;
+    }
+
+    .debug-info {
+      margin-bottom: 5px;
+    }
+
+    .debug-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .debug-btn {
+      padding: 8px 15px;
+      background: #ff9800;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+
+    .debug-btn:hover {
+      background: #e68900;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 20px;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎵 Leone Tours Radio DJ</h1>
-        
-        <!-- START SCREEN -->
-        <div id="start-screen">
-            <p id="loading-status" class="status-text">Click START to begin</p>
-            <button id="start-btn" class="big-button">START PLAYING</button>
-        </div>
-        
-        <!-- PLAYER SCREEN -->
-        <div id="player-screen" style="display: none;">
-            <!-- Now Playing Display -->
-            <div id="now-playing">
-                <p class="label">Now Playing:</p>
-                <h2 id="track-title">Loading...</h2>
-                <p id="track-artist" class="track-type">MUSIC</p>
-            </div>
-            
-            <!-- Audio Element -->
-            <audio id="audio-player"></audio>
-            
-            <!-- Progress Bar -->
-            <div class="progress-container">
-                <div id="progress-bar" class="progress-bar"></div>
-            </div>
-            
-            <!-- Main Controls -->
-            <div class="controls">
-                <button id="play-pause-btn" class="control-btn">▶</button>
-                <button id="skip-btn" class="control-btn">⏭</button>
-                <div class="volume-control">
-                    <span>🔊</span>
-                    <input type="range" id="volume" min="0" max="100" value="70">
-                </div>
-            </div>
-            
-            <!-- Secondary Controls -->
-            <div class="secondary-controls">
-                <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
-                <button id="stop-btn" class="secondary-btn stop-btn">⏹ Stop</button>
-            </div>
-            
-            <!-- Settings Panel (Hidden by default) -->
-            <div id="settings-panel" class="settings-panel hidden">
-                <h3>DJ Content Settings</h3>
-                <p class="settings-info">Control how often Burt tells jokes, stories, or commentary between songs</p>
-                
-                <div class="slider-group">
-                    <label>
-                        <span class="slider-label">😄 Jokes</span>
-                        <span id="joke-value" class="slider-value">15%</span>
-                    </label>
-                    <input type="range" id="joke-slider" min="0" max="100" value="15" step="5">
-                </div>
-                
-                <div class="slider-group">
-                    <label>
-                        <span class="slider-label">📖 Stories</span>
-                        <span id="story-value" class="slider-value">15%</span>
-                    </label>
-                    <input type="range" id="story-slider" min="0" max="100" value="15" step="5">
-                </div>
-                
-                <div class="slider-group">
-                    <label>
-                        <span class="slider-label">📻 DJ Blurbs</span>
-                        <span id="blurb-value" class="slider-value">10%</span>
-                    </label>
-                    <input type="range" id="blurb-slider" min="0" max="100" value="10" step="5">
-                </div>
-                
-                <div class="slider-group">
-                    <label>
-                        <span class="slider-label">🎵 Nothing (Just Music)</span>
-                        <span id="nothing-value" class="slider-value">60%</span>
-                    </label>
-                    <div class="readonly-bar">
-                        <div id="nothing-bar" class="nothing-fill" style="width: 60%"></div>
-                    </div>
-                </div>
+  <div class="container">
+    <!-- START SCREEN -->
+    <div id="start-screen">
+      <h1>🎵 DJ Burt</h1>
+      <p class="subtitle">Bolton Clarke Cafe Player</p>
+      
+      <div class="status" id="loading-status">Initializing...</div>
+      
+      <!-- Toggle Controls (Start Screen) -->
+      <div class="toggles-container">
+        <button class="toggle-btn" id="morning-events-toggle">✅ Morning Events ON</button>
+        <button class="toggle-btn" id="afternoon-events-toggle">✅ Afternoon Events ON</button>
+        <button class="toggle-btn" id="instrumental-toggle">🎵 Instrumental Mode OFF</button>
+      </div>
+      
+      <button class="start-btn" id="start-btn">START PLAYING</button>
+    </div>
 
-                <div class="debug-panel">
-    <h3>🔧 Debug & Testing</h3>
-    
-    <div class="debug-info">
-        <p><strong>Last Calendar:</strong> <span id="debug-last-calendar">Never</span></p>
-        <p><strong>Last Other:</strong> <span id="debug-last-other">Never</span></p>
-        <p><strong>Last Type:</strong> <span id="debug-last-type">None</span></p>
-        <p><strong>Current Time:</strong> <span id="debug-current-time">--:--</span></p>
-    </div>
-    
-    <div class="debug-controls">
-        <button id="force-calendar-btn" class="debug-btn">📅 Force Calendar Now</button>
-        <button id="force-other-btn" class="debug-btn">📢 Force Other Now</button>
-        <button id="force-lunch-btn" class="debug-btn">🍽️ Force Lunch Warning</button>
-        <button id="force-dinner-btn" class="debug-btn">🍽️ Force Dinner Warning</button>
-        <button id="reset-timers-btn" class="debug-btn">⏱️ Reset All Timers</button>
-    </div>
-    
-    <div class="debug-interval">
-        <label>
-            <span class="slider-label">⏱️ Test Interval (minutes)</span>
-            <span id="test-interval-value" class="slider-value">30min</span>
-        </label>
-        <input type="range" id="test-interval-slider" min="1" max="60" value="30" step="1">
-        <p class="debug-note">💡 Adjust for testing - normal is 30 minutes</p>
-    </div>
-</div>
-                
-                <p id="settings-warning" class="warning" style="display: none;">
-                    ⚠️ Total must not exceed 100%
-                </p>
-                
-                <p class="settings-tip">
-                    💡 <strong>Tip:</strong> Higher "Nothing" % = More music, less chat
-                </p>
-            </div>
+    <!-- PLAYER SCREEN -->
+    <div id="player-screen" class="hidden">
+      <div class="now-playing">
+        <div class="track-title" id="track-title">--</div>
+        <div class="track-artist" id="track-artist">--</div>
+      </div>
+
+      <!-- Toggle Controls (Player Screen) -->
+      <div class="toggles-container">
+        <button class="toggle-btn" id="morning-events-toggle-player">✅ Morning Events ON</button>
+        <button class="toggle-btn" id="afternoon-events-toggle-player">✅ Afternoon Events ON</button>
+        <button class="toggle-btn" id="instrumental-toggle-player">🎵 Instrumental Mode OFF</button>
+      </div>
+
+      <div class="controls">
+        <button class="control-btn" id="play-pause-btn">▶</button>
+        <button class="control-btn" id="skip-btn">⏭</button>
+        <button class="control-btn" id="stop-btn">⏹</button>
+        <button class="control-btn" id="settings-btn">⚙️</button>
+      </div>
+
+      <div class="volume-control">
+        <span>🔊</span>
+        <input type="range" id="volume" min="0" max="100" value="70">
+        <span>Volume</span>
+      </div>
+
+      <!-- Settings Panel -->
+      <div class="settings-panel hidden" id="settings-panel">
+        <h3>DJ Content Settings</h3>
+        
+        <div class="setting-row">
+          <label>
+            Joke Chance: <span class="setting-value" id="joke-value">15%</span>
+          </label>
+          <input type="range" id="joke-slider" min="0" max="100" value="15">
         </div>
+
+        <div class="setting-row">
+          <label>
+            Story Chance: <span class="setting-value" id="story-value">15%</span>
+          </label>
+          <input type="range" id="story-slider" min="0" max="100" value="15">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Commentary Chance: <span class="setting-value" id="blurb-value">10%</span>
+          </label>
+          <input type="range" id="blurb-slider" min="0" max="100" value="10">
+        </div>
+
+        <div class="setting-row">
+          <label>
+            Nothing (Just Music): <span class="setting-value" id="nothing-value">60%</span>
+          </label>
+        </div>
+
+        <div id="settings-warning" class="hidden" style="color: red; margin-top: 10px;">
+          ⚠️ Total must not exceed 100%
+        </div>
+
+        <!-- Debug Panel -->
+        <div class="debug-panel">
+          <h3>🔧 Debug Controls</h3>
+          
+          <div class="debug-info">
+            Current Time: <strong id="debug-current-time">--:--</strong>
+          </div>
+          <div class="debug-info">
+            Last Calendar: <strong id="debug-last-calendar">Never</strong>
+          </div>
+          <div class="debug-info">
+            Last Other: <strong id="debug-last-other">Never</strong>
+          </div>
+          <div class="debug-info">
+            Last Type: <strong id="debug-last-type">None</strong>
+          </div>
+
+          <div class="setting-row">
+            <label>
+              Test Interval: <span class="setting-value" id="test-interval-value">30min</span>
+            </label>
+            <input type="range" id="test-interval-slider" min="1" max="60" value="30">
+          </div>
+
+          <div class="debug-controls">
+            <button class="debug-btn" id="force-calendar-btn">Force Calendar</button>
+            <button class="debug-btn" id="force-other-btn">Force Other</button>
+            <button class="debug-btn" id="force-lunch-btn">Force Lunch</button>
+            <button class="debug-btn" id="force-dinner-btn">Force Dinner</button>
+            <button class="debug-btn" id="reset-timers-btn">Reset Timers</button>
+          </div>
+        </div>
+      </div>
+
+      <audio id="audio-player" controls></audio>
     </div>
-    
-    <script src="player.js"></script>
+  </div>
+
+  <script src="player.js"></script>
 </body>
 </html>
