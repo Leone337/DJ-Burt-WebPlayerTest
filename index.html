@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leone Tours Radio DJ</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Leone Tours Radio DJ</h1>
+        
+        <div id="start-screen">
+            <button id="start-btn" class="big-button">START PLAYING</button>
+        </div>
+        
+        <div id="player-screen" style="display: none;">
+            <div id="now-playing">
+                <p class="label">Now Playing:</p>
+                <h2 id="track-title">Loading...</h2>
+                <p id="track-artist"></p>
+            </div>
+            
+            <audio id="audio-player"></audio>
+            
+            <div class="controls">
+                <button id="play-pause-btn">⏸</button>
+                <button id="skip-btn">⏭</button>
+                <input type="range" id="volume" min="0" max="100" value="70">
+                <button id="stop-btn">⏹ Stop</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="player.js"></script>
+</body>
+</html>

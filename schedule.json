@@ -1,0 +1,53 @@
+{
+  "intro": "audio/intro.mp3",
+  "outro": "audio/outro.mp3",
+  
+  "songs": [
+    "audio/song1.mp3",
+    "audio/song2.mp3"
+  ],
+  
+  "dj_pool": [
+    "audio/dj_story_1.mp3"
+  ],
+  
+  "ambient_lunch": [
+    "audio/ambient_lunch.mp3"
+  ],
+  
+  "announcements": {
+    "lunch_soon": "audio/lunch_soon.mp3",
+    "management": "audio/management_update.mp3"
+  },
+  
+  "weekly_schedule": {
+    "monday": {
+      "morning": ["audio/morning_craft.mp3"],
+      "afternoon": ["audio/afternoon_movie.mp3"]
+    },
+    "tuesday": {
+      "morning": [],
+      "afternoon": ["audio/afternoon_movie.mp3"]
+    },
+    "wednesday": {
+      "morning": ["audio/morning_craft.mp3"],
+      "afternoon": []
+    },
+    "thursday": {
+      "morning": [],
+      "afternoon": ["audio/afternoon_movie.mp3"]
+    },
+    "friday": {
+      "morning": ["audio/morning_craft.mp3"],
+      "afternoon": []
+    },
+    "saturday": {
+      "morning": [],
+      "afternoon": []
+    },
+    "sunday": {
+      "morning": [],
+      "afternoon": []
+    }
+  }
+}
