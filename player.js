@@ -61,8 +61,6 @@ let pools = {
 let lastCalendarAnnouncementTime = null;
 let lastOtherAnnouncementTime = null;
 let lastAnnouncementType = null; // 'calendar' or 'other'
-let lastWeatherAnnouncementTime = null;
-let weatherPlayedToday = false; // Reset daily
 
 // Playback tracking
 let playedMusic = new Set();
@@ -487,7 +485,22 @@ async function buildNextTracks() {
         return tracks;
       }
     } else if (announcementNeeded.type === 'calendar') {
-      // Calendar announcement
+      // Calendar announcement with weather first
+      
+      // Try to get weather files first
+      const weatherFiles = await getWeatherAnnouncement();
+      if (weatherFiles && weatherFiles.length > 0) {
+        weatherFiles.forEach(file => {
+          tracks.push({
+            file: file,
+            title: file.name.replace(/\.[^/.]+$/, ''),
+            type: 'announcement-weather'
+          });
+        });
+        console.log(`🌤️ Added weather: ${weatherFiles.length} files`);
+      }
+      
+      // Then get calendar files
       const calendarFiles = getCalendarAnnouncement();
       if (calendarFiles && calendarFiles.length > 0) {
         calendarFiles.forEach(file => {
@@ -528,29 +541,6 @@ async function buildNextTracks() {
         lastOtherAnnouncementTime = Date.now();
         lastAnnouncementTime = Date.now();
         lastAnnouncementType = 'other';
-        // Fall through to play music instead
-      }
-    } else if (announcementNeeded.type === 'weather') {
-      // Weather announcement
-      const weatherFiles = await getWeatherAnnouncement();
-      if (weatherFiles && weatherFiles.length > 0) {
-        weatherFiles.forEach(file => {
-          tracks.push({
-            file: file,
-            title: file.name.replace(/\.[^/.]+$/, ''),
-            type: 'announcement-weather'
-          });
-        });
-        weatherPlayedToday = true;
-        lastWeatherAnnouncementTime = Date.now();
-        lastAnnouncementTime = Date.now();
-        return tracks;
-      } else {
-        // No weather available - update flag anyway
-        console.log('⚠️ No WEATHER announcements available, skipping to music');
-        weatherPlayedToday = true;
-        lastWeatherAnnouncementTime = Date.now();
-        lastAnnouncementTime = Date.now();
         // Fall through to play music instead
       }
     }
@@ -676,18 +666,6 @@ function shouldPlayAnnouncement() {
     if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
       console.log('🍽️ Dinner warning time');
       return { type: 'meal', meal: 'dinner' };
-    }
-  }
-  
-  // Check for weather announcement (once per day, between 9:00-23:00 for testing)
-  const weatherTime = currentTime.hours >= 9 && currentTime.hours < 23;
-  if (weatherTime && !weatherPlayedToday) {
-    if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
-      // Only play weather if we have weather files
-      if (pools.weather_conditions.length > 0 || pools.weather_temperature.length > 0) {
-        console.log('🌤️ Time for WEATHER announcement');
-        return { type: 'weather' };
-      }
     }
   }
   
