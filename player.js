@@ -679,8 +679,8 @@ function shouldPlayAnnouncement() {
     }
   }
   
-  // Check for weather announcement (once per day, between 9:00-11:00)
-  const weatherTime = currentTime.hours >= 9 && currentTime.hours < 11;
+  // Check for weather announcement (once per day, between 9:00-23:00 for testing)
+  const weatherTime = currentTime.hours >= 9 && currentTime.hours < 23;
   if (weatherTime && !weatherPlayedToday) {
     if (!lastAnnouncementTime || minutesSince(lastAnnouncementTime) >= CONFIG.settings.announcementIntervalMinutes) {
       // Only play weather if we have weather files
